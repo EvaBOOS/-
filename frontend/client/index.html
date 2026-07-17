@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Dashboard - AI Video Generator</title>
+    <link rel="stylesheet" href="static/css/client.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen active">
+            <div class="login-card">
+                <div class="logo">🎬</div>
+                <h1>AI Video Generator</h1>
+                <p class="subtitle">Личный кабинет</p>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" required placeholder="your@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Пароль</label>
+                        <input type="password" id="password" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Войти</button>
+                    <p id="login-error" class="error-message"></p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dashboard Screen -->
+        <div id="dashboard-screen" class="screen">
+            <nav class="sidebar">
+                <div class="sidebar-header">
+                    <span class="logo-text">🎬 VideoGen</span>
+                </div>
+                <ul class="nav-menu">
+                    <li class="nav-item active" data-page="generate">
+                        <span class="nav-icon">✨</span>
+                        <span>Создать видео</span>
+                    </li>
+                    <li class="nav-item" data-page="history">
+                        <span class="nav-icon">📁</span>
+                        <span>Мои видео</span>
+                    </li>
+                    <li class="nav-item" data-page="profile">
+                        <span class="nav-icon">👤</span>
+                        <span>Профиль</span>
+                    </li>
+                </ul>
+                <div class="sidebar-footer">
+                    <div class="credits-badge">
+                        <span class="credits-icon">💎</span>
+                        <span id="credits-count">0</span>
+                        <span>кредитов</span>
+                    </div>
+                    <button id="logout-btn" class="btn btn-secondary">
+                        Выйти
+                    </button>
+                </div>
+            </nav>
+
+            <main class="main-content">
+                <header class="top-bar">
+                    <h2 id="page-title">Создать видео</h2>
+                    <div class="user-info">
+                        <span id="company-name">Моя компания</span>
+                    </div>
+                </header>
+
+                <!-- Generate Page -->
+                <div id="page-generate" class="page active">
+                    <div class="generate-container">
+                        <div class="generate-card">
+                            <h3>📝 Введите текст сценария</h3>
+                            <p class="hint">Опишите свою идею или тему своими словами. ИИ преобразует её в вирусный сценарий.</p>
+                            
+                            <form id="generate-form">
+                                <div class="form-group">
+                                    <label for="script-text">Ваш текст</label>
+                                    <textarea 
+                                        id="script-text" 
+                                        rows="6" 
+                                        placeholder="Например: Расскажи о 5 способах заработка в интернете для начинающих. Тон дружелюбный, с юмором."
+                                        required
+                                        minlength="10"
+                                        maxlength="5000"
+                                    ></textarea>
+                                    <span class="char-count"><span id="char-count">0</span>/5000</span>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="language">Язык видео</label>
+                                    <select id="language">
+                                        <option value="ru">🇷🇺 Русский</option>
+                                        <option value="en">🇺🇸 English</option>
+                                        <option value="es">🇪🇸 Español</option>
+                                        <option value="de">🇩🇪 Deutsch</option>
+                                        <option value="fr">🇫🇷 Français</option>
+                                        <option value="it">🇮🇹 Italiano</option>
+                                        <option value="pt">🇧🇷 Português</option>
+                                        <option value="zh">🇨🇳 中文</option>
+                                        <option value="ja">🇯🇵 日本語</option>
+                                        <option value="ko">🇰🇷 한국어</option>
+                                        <option value="ar">🇸🇦 العربية</option>
+                                        <option value="hi">🇮🇳 हिन्दी</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary btn-large">
+                                        <span class="btn-icon">🚀</span>
+                                        Создать видео
+                                    </button>
+                                </div>
+                                
+                                <p id="generate-error" class="error-message"></p>
+                            </form>
+                        </div>
+                        
+                        <div class="info-card">
+                            <h4>Как это работает?</h4>
+                            <ol class="steps-list">
+                                <li>
+                                    <span class="step-icon">1️⃣</span>
+                                    <div>
+                                        <strong>GPT-4o</strong>
+                                        <p>Преобразует ваш текст в вирусный сценарий</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="step-icon">2️⃣</span>
+                                    <div>
+                                        <strong>ElevenLabs</strong>
+                                        <p>Озвучивает сценарий реалистичным голосом</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="step-icon">3️⃣</span>
+                                    <div>
+                                        <strong>HeyGen</strong>
+                                        <p>Создаёт видео с ИИ-аватаром и липсинком</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="step-icon">4️⃣</span>
+                                    <div>
+                                        <strong>Финал</strong>
+                                        <p>Добавляем субтитры и ваш логотип</p>
+                                    </div>
+                                </li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History Page -->
+                <div id="page-history" class="page">
+                    <div class="filters-bar">
+                        <select id="status-filter">
+                            <option value="">Все статусы</option>
+                            <option value="pending">Ожидание</option>
+                            <option value="script_generation">Генерация сценария</option>
+                            <option value="voice_synthesis">Озвучка</option>
+                            <option value="avatar_generation">Создание аватара</option>
+                            <option value="video_processing">Обработка видео</option>
+                            <option value="completed">Готово</option>
+                            <option value="failed">Ошибка</option>
+                        </select>
+                        <button id="refresh-btn" class="btn btn-secondary">🔄 Обновить</button>
+                    </div>
+                    
+                    <div id="generations-list" class="generations-grid">
+                        <!-- Dynamic content -->
+                    </div>
+                    
+                    <div id="pagination" class="pagination">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+
+                <!-- Profile Page -->
+                <div id="page-profile" class="page">
+                    <div class="profile-grid">
+                        <div class="profile-card">
+                            <h3>📊 Статистика</h3>
+                            <div class="stats-list">
+                                <div class="stat-item">
+                                    <span class="stat-label">Тариф</span>
+                                    <span class="stat-value" id="profile-plan">Basic</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Кредиты</span>
+                                    <span class="stat-value" id="profile-credits">0 / 15</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Использовано в этом месяце</span>
+                                    <span class="stat-value" id="profile-used">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Начало цикла</span>
+                                    <span class="stat-value" id="profile-cycle">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="profile-card">
+                            <h3>🎨 Брендинг</h3>
+                            <div class="branding-info">
+                                <div class="branding-item">
+                                    <span class="branding-label">Логотип</span>
+                                    <div id="profile-watermark" class="branding-preview">
+                                        <span class="placeholder">Не загружен</span>
+                                    </div>
+                                </div>
+                                <div class="branding-item">
+                                    <span class="branding-label">Шрифт субтитров</span>
+                                    <span class="branding-value" id="profile-font">Arial</span>
+                                </div>
+                                <div class="branding-item">
+                                    <span class="branding-label">Цвет субтитров</span>
+                                    <span class="branding-value">
+                                        <span id="profile-font-color-preview" class="color-preview"></span>
+                                        <span id="profile-font-color">#FFFFFF</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <p class="hint">Для изменения настроек брендинга обратитесь к администратору.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generation Detail Modal -->
+                <div id="generation-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Детали генерации</h3>
+                            <button class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="generation-status">
+                                <div class="status-badge" id="modal-status">Статус</div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="modal-progress"></div>
+                                </div>
+                                <span class="progress-text" id="modal-progress-text">0%</span>
+                            </div>
+                            
+                            <div class="generation-details">
+                                <div class="detail-section">
+                                    <h4>Исходный текст</h4>
+                                    <p id="modal-original-text"></p>
+                                </div>
+                                
+                                <div class="detail-section" id="script-section" style="display: none;">
+                                    <h4>Сгенерированный сценарий</h4>
+                                    <p id="modal-generated-script"></p>
+                                </div>
+                                
+                                <div class="detail-section" id="error-section" style="display: none;">
+                                    <h4>Ошибка</h4>
+                                    <p id="modal-error" class="error-text"></p>
+                                </div>
+                                
+                                <div class="detail-section" id="video-section" style="display: none;">
+                                    <h4>Готовое видео</h4>
+                                    <video id="modal-video" controls></video>
+                                    <div class="video-info">
+                                        <span id="modal-duration">Длительность: -</span>
+                                        <span id="modal-size">Размер: -</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary modal-close">Закрыть</button>
+                            <a id="download-btn" href="#" class="btn btn-primary" style="display: none;" download>
+                                📥 Скачать MP4
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="static/js/client.js"></script>
+</body>
+</html>

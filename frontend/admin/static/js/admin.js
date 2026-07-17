@@ -1,0 +1,413 @@
+const API_BASE = '/api/v1';
+let authToken = localStorage.getItem('admin_token');
+let currentUser = null;
+
+// API Helper
+async function api(endpoint, options = {}) {
+    const url = `${API_BASE}${endpoint}`;
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+    };
+    
+    if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    const response = await fetch(url, {
+        ...options,
+        headers
+    });
+    
+    if (response.status === 401) {
+        logout();
+        throw new Error('Session expired');
+    }
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+        throw new Error(data.detail || 'API Error');
+    }
+    
+    return data;
+}
+
+// Auth Functions
+async function login(email, password) {
+    const data = await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+    });
+    
+    authToken = data.access_token;
+    localStorage.setItem('admin_token', authToken);
+    
+    return data;
+}
+
+function logout() {
+    authToken = null;
+    currentUser = null;
+    localStorage.removeItem('admin_token');
+    showScreen('login');
+}
+
+async function checkAuth() {
+    if (!authToken) {
+        showScreen('login');
+        return false;
+    }
+    
+    try {
+        currentUser = await api('/auth/me');
+        if (currentUser.role !== 'admin') {
+            logout();
+            return false;
+        }
+        document.getElementById('user-email').textContent = currentUser.email;
+        return true;
+    } catch (e) {
+        logout();
+        return false;
+    }
+}
+
+// Screen Navigation
+function showScreen(screenName) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(`${screenName}-screen`).classList.add('active');
+}
+
+function showPage(pageName) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(`page-${pageName}`).classList.add('active');
+    
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector(`.nav-item[data-page="${pageName}"]`)?.classList.add('active');
+    
+    const titles = {
+        'overview': 'Обзор',
+        'clients': 'Клиенты',
+        'create-client': 'Новый клиент'
+    };
+    document.getElementById('page-title').textContent = titles[pageName] || pageName;
+    
+    if (pageName === 'overview') {
+        loadStats();
+    } else if (pageName === 'clients') {
+        loadClients();
+    }
+}
+
+// Load Stats
+async function loadStats() {
+    try {
+        const stats = await api('/admin/stats');
+        document.getElementById('stat-clients').textContent = stats.total_clients;
+        document.getElementById('stat-active').textContent = stats.active_clients;
+        document.getElementById('stat-videos').textContent = stats.total_generations;
+        document.getElementById('stat-success').textContent = `${stats.success_rate}%`;
+    } catch (e) {
+        console.error('Failed to load stats:', e);
+    }
+}
+
+// Load Clients
+async function loadClients() {
+    try {
+        const clients = await api('/admin/clients');
+        const tbody = document.getElementById('clients-table-body');
+        
+        tbody.innerHTML = clients.map(client => `
+            <tr>
+                <td>${client.id}</td>
+                <td>${client.company_name || '-'}</td>
+                <td>${client.user_email || '-'}</td>
+                <td><span class="badge badge-info">${client.subscription_plan}</span></td>
+                <td>${client.credits_remaining} / ${getPlanLimit(client.subscription_plan)}</td>
+                <td>
+                    <span class="badge ${client.is_active ? 'badge-success' : 'badge-danger'}">
+                        ${client.is_active ? 'Активен' : 'Неактивен'}
+                    </span>
+                </td>
+                <td>
+                    <button class="action-btn action-btn-edit" onclick="openClientModal(${client.id})">
+                        Редактировать
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('Failed to load clients:', e);
+    }
+}
+
+function getPlanLimit(plan) {
+    const limits = { basic: 15, standard: 30, premium: 60 };
+    return limits[plan] || 15;
+}
+
+// Create Client
+async function createClient(formData) {
+    const data = {
+        user_email: formData.email,
+        user_password: formData.password,
+        user_full_name: formData.name,
+        company_name: formData.company,
+        subscription_plan: formData.plan,
+        elevenlabs_voice_id: formData.voiceId || null,
+        heygen_avatar_id: formData.avatarId || null
+    };
+    
+    return await api('/admin/clients', {
+        method: 'POST',
+        body: JSON.stringify(data)
+    });
+}
+
+// Client Modal
+let currentClientId = null;
+
+async function openClientModal(clientId) {
+    currentClientId = clientId;
+    
+    try {
+        const client = await api(`/admin/clients/${clientId}`);
+        
+        document.getElementById('edit-client-id').value = client.id;
+        document.getElementById('edit-company').value = client.company_name || '';
+        document.getElementById('edit-plan').value = client.subscription_plan;
+        document.getElementById('edit-voice').value = client.elevenlabs_voice_id || '';
+        document.getElementById('edit-avatar').value = client.heygen_avatar_id || '';
+        document.getElementById('edit-active').checked = client.is_active;
+        
+        if (client.branding) {
+            document.getElementById('edit-watermark-position').value = client.branding.watermark_position;
+            document.getElementById('edit-font-name').value = client.branding.subtitle_font_name;
+            document.getElementById('edit-font-size').value = client.branding.subtitle_font_size;
+            document.getElementById('edit-font-color').value = client.branding.subtitle_font_color;
+        }
+        
+        document.getElementById('current-credits').textContent = client.credits_remaining;
+        document.getElementById('used-credits').textContent = client.credits_used_this_month;
+        
+        document.getElementById('client-modal').classList.add('active');
+        showTab('general');
+    } catch (e) {
+        alert('Ошибка загрузки данных клиента: ' + e.message);
+    }
+}
+
+function closeModal() {
+    document.getElementById('client-modal').classList.remove('active');
+    currentClientId = null;
+}
+
+function showTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    
+    document.querySelector(`.tab-btn[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+}
+
+async function saveClient() {
+    if (!currentClientId) return;
+    
+    try {
+        // Update general settings
+        await api(`/admin/clients/${currentClientId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+                company_name: document.getElementById('edit-company').value,
+                subscription_plan: document.getElementById('edit-plan').value,
+                elevenlabs_voice_id: document.getElementById('edit-voice').value || null,
+                heygen_avatar_id: document.getElementById('edit-avatar').value || null,
+                is_active: document.getElementById('edit-active').checked
+            })
+        });
+        
+        // Update branding
+        await api(`/admin/clients/${currentClientId}/branding`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+                watermark_position: document.getElementById('edit-watermark-position').value,
+                subtitle_font_name: document.getElementById('edit-font-name').value,
+                subtitle_font_size: parseInt(document.getElementById('edit-font-size').value),
+                subtitle_font_color: document.getElementById('edit-font-color').value
+            })
+        });
+        
+        closeModal();
+        loadClients();
+    } catch (e) {
+        alert('Ошибка сохранения: ' + e.message);
+    }
+}
+
+async function addCredits() {
+    if (!currentClientId) return;
+    
+    const amount = parseInt(document.getElementById('add-credits-amount').value);
+    if (!amount || amount < 1) {
+        alert('Укажите количество кредитов');
+        return;
+    }
+    
+    try {
+        const result = await api(`/admin/clients/${currentClientId}/add-credits?credits=${amount}`, {
+            method: 'POST'
+        });
+        
+        document.getElementById('current-credits').textContent = result.new_balance;
+        alert(result.message);
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+async function resetCycle() {
+    if (!currentClientId) return;
+    
+    if (!confirm('Сбросить цикл биллинга и восстановить кредиты?')) return;
+    
+    try {
+        const result = await api(`/admin/clients/${currentClientId}/reset-cycle`, {
+            method: 'POST'
+        });
+        
+        document.getElementById('current-credits').textContent = result.credits_remaining;
+        document.getElementById('used-credits').textContent = '0';
+        alert(result.message);
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+async function uploadFile(clientId, type) {
+    const inputId = type === 'watermark' ? 'edit-watermark' : 'edit-font';
+    const input = document.getElementById(inputId);
+    
+    if (!input.files.length) return;
+    
+    const formData = new FormData();
+    formData.append('file', input.files[0]);
+    
+    try {
+        const response = await fetch(`${API_BASE}/admin/clients/${clientId}/${type}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail);
+        }
+        
+        const result = await response.json();
+        alert(result.message);
+    } catch (e) {
+        alert('Ошибка загрузки: ' + e.message);
+    }
+}
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check authentication
+    const isAuthenticated = await checkAuth();
+    if (isAuthenticated) {
+        showScreen('dashboard');
+        showPage('overview');
+    }
+    
+    // Login form
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const errorEl = document.getElementById('login-error');
+        
+        try {
+            await login(email, password);
+            const isAdmin = await checkAuth();
+            if (isAdmin) {
+                showScreen('dashboard');
+                showPage('overview');
+            } else {
+                errorEl.textContent = 'Доступ только для администраторов';
+            }
+        } catch (e) {
+            errorEl.textContent = e.message;
+        }
+    });
+    
+    // Logout
+    document.getElementById('logout-btn').addEventListener('click', logout);
+    
+    // Navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const page = item.dataset.page;
+            showPage(page);
+        });
+    });
+    
+    // Create client form
+    document.getElementById('create-client-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errorEl = document.getElementById('create-error');
+        const successEl = document.getElementById('create-success');
+        errorEl.textContent = '';
+        successEl.textContent = '';
+        
+        const formData = {
+            email: document.getElementById('client-email').value,
+            password: document.getElementById('client-password').value,
+            name: document.getElementById('client-name').value,
+            company: document.getElementById('client-company').value,
+            plan: document.querySelector('input[name="plan"]:checked').value,
+            voiceId: document.getElementById('elevenlabs-voice').value,
+            avatarId: document.getElementById('heygen-avatar').value
+        };
+        
+        try {
+            await createClient(formData);
+            successEl.textContent = 'Клиент успешно создан!';
+            e.target.reset();
+        } catch (e) {
+            errorEl.textContent = e.message;
+        }
+    });
+    
+    // Modal controls
+    document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+    
+    document.getElementById('save-client-btn').addEventListener('click', saveClient);
+    document.getElementById('add-credits-btn').addEventListener('click', addCredits);
+    document.getElementById('reset-cycle-btn').addEventListener('click', resetCycle);
+    
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => showTab(btn.dataset.tab));
+    });
+    
+    // File uploads
+    document.getElementById('edit-watermark').addEventListener('change', () => {
+        if (currentClientId) uploadFile(currentClientId, 'watermark');
+    });
+    
+    document.getElementById('edit-font').addEventListener('change', () => {
+        if (currentClientId) uploadFile(currentClientId, 'font');
+    });
+    
+    // Close modal on outside click
+    document.getElementById('client-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'client-modal') closeModal();
+    });
+});
