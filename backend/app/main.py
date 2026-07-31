@@ -246,7 +246,6 @@ async def root():
                 <div class="actions">
                     <a class="btn btn-primary" href="/dashboard">Кабинет клиента</a>
                     <a class="btn btn-lime" href="/admin">Админка</a>
-                    <a class="btn" href="/docs">API Docs</a>
                 </div>
                 <div class="meta">
                     <span class="chip">AITUNNEL</span>

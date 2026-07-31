@@ -68,6 +68,8 @@ services:
       - TRENDS_DEFAULT_REGION=${TRENDS_DEFAULT_REGION:-RU}
       - TRENDS_ANALYZE_COST_CREDITS=${TRENDS_ANALYZE_COST_CREDITS:-1}
       - TIKTOK_TRENDS_ENABLED=${TIKTOK_TRENDS_ENABLED:-true}
+      - YTDLP_COOKIES_FILE=${YTDLP_COOKIES_FILE:-}
+      - YTDLP_COOKIES_FROM_BROWSER=${YTDLP_COOKIES_FROM_BROWSER:-}
       - FIRST_ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme123}
       - MEDIA_ROOT=/app/media
@@ -75,6 +77,7 @@ services:
       - GENERATED_DIR=/app/media/generated
     volumes:
       - media_data:/app/media
+      - ../backend/secrets:/app/secrets:rw
     depends_on:
       db:
         condition: service_healthy
@@ -125,11 +128,14 @@ services:
       - TRENDS_DEFAULT_REGION=${TRENDS_DEFAULT_REGION:-RU}
       - TRENDS_ANALYZE_COST_CREDITS=${TRENDS_ANALYZE_COST_CREDITS:-1}
       - TIKTOK_TRENDS_ENABLED=${TIKTOK_TRENDS_ENABLED:-true}
+      - YTDLP_COOKIES_FILE=${YTDLP_COOKIES_FILE:-}
+      - YTDLP_COOKIES_FROM_BROWSER=${YTDLP_COOKIES_FROM_BROWSER:-}
       - MEDIA_ROOT=/app/media
       - UPLOAD_DIR=/app/media/uploads
       - GENERATED_DIR=/app/media/generated
     volumes:
       - media_data:/app/media
+      - ../backend/secrets:/app/secrets:rw
     depends_on:
       db:
         condition: service_healthy

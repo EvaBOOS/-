@@ -145,36 +145,39 @@ def _ytdlp_download(url: str, dest_dir: str, max_bytes: int) -> Tuple[str, str]:
 
     cookie_opts = _ytdlp_cookie_opts()
     formats = [
+        # Progressive first: SABR/web often leaves only storyboards + itag 18.
+        "18/22/best[ext=mp4]/best",
         "bestvideo*+bestaudio/best",
         "bv*[height<=1080]+ba/b",
         "best",
     ]
-    # Web cookies + android client → often only storyboards ("format not available").
-    # Prefer web clients when cookiefile is present.
-    if cookie_opts.get("cookiefile") or cookie_opts.get("cookiesfrombrowser"):
-        client_sets = [
-            ["web"],
-            ["web_safari", "web"],
-            ["mweb", "web"],
-            ["tv_embedded", "web"],
-        ]
-    else:
-        client_sets = [
-            ["android", "ios", "web"],
-            ["tv_embedded", "android"],
-            ["web"],
-        ]
+    # Android/ios often still expose progressive mp4 without cookies.
+    # Web+cookies can be needed for bot checks but may return storyboards only.
+    client_sets_no_cookies = [
+        ["android", "ios", "web"],
+        ["tv_embedded", "android"],
+        ["web"],
+    ]
+    client_sets_with_cookies = [
+        ["web"],
+        ["web_safari", "web"],
+        ["mweb", "web"],
+        ["tv_embedded", "web"],
+        ["android", "web"],
+    ]
 
     attempts: list[dict] = []
-    for clients in client_sets:
+    # 1) No-cookie android path (works under SABR experiments).
+    for clients in client_sets_no_cookies:
         for fmt in formats:
-            o = _base_opts(clients, fmt)
-            # Prefer cookie-authenticated attempts first
-            if cookie_opts:
-                with_ck = dict(o)
+            attempts.append(_base_opts(clients, fmt))
+    # 2) Cookie-authenticated web path for bot walls.
+    if cookie_opts:
+        for clients in client_sets_with_cookies:
+            for fmt in formats:
+                with_ck = _base_opts(clients, fmt)
                 with_ck.update(cookie_opts)
                 attempts.append(with_ck)
-            attempts.append(o)
 
     info = None
     last_exc: Optional[BaseException] = None
