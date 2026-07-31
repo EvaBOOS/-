@@ -1,9 +1,11 @@
-# Paths that often contain false positives (fixtures, vendored samples)
+# Regexes (not globs) — TruffleHog --exclude-paths
 backend/media/generated/
 backend/media/uploads/
-**/*.mp4
-**/*.mp3
-**/*.wav
-**/*.png
-**/*.jpg
-**/*.webp
+.*\.mp4$
+.*\.mp3$
+.*\.wav$
+.*\.png$
+.*\.jpe?g$
+.*\.webp$
+.*\.mov$
+.*\.mkv$
