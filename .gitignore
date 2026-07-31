@@ -42,6 +42,7 @@ env/
 **/cookies.txt
 **/youtube_cookies.txt
 backend/media/secrets/
+backend/secrets/
 
 # Logs
 *.log

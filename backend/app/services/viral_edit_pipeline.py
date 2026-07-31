@@ -379,9 +379,9 @@ class ViralEditPipeline:
             inserts = []
             broll_max = int(style_cfg.get("broll_max") or 3)
             cues = [c for c in (plan.get("broll") or []) if isinstance(c, dict)]
-            # Silent real footage: never invent stock overlays (that's how we got
-            # "concert crowd" pip on a wedding/party clip).
-            if no_speech and not source_dark:
+            # Silent clips: never invent stock overlays / slideshow — keep the user's frame
+            # even if is_mostly_dark (evening party lights often trip that heuristic).
+            if no_speech:
                 cues = []
             elif source_dark or not cues:
                 # Extra theme queries when canvas is empty — need full coverage
@@ -417,7 +417,9 @@ class ViralEditPipeline:
                 except Exception:
                     continue
 
-            if (source_dark or not inserts) and photo_paths:
+            if no_speech:
+                generation.api_responses["visual_mode"] = "silent_source"
+            elif (source_dark or not inserts) and photo_paths:
                 bg_path = os.path.join(work_dir, "photo_bg.mp4")
                 try:
                     audio_for_bg = generation.audio_path or framed_path
@@ -465,7 +467,7 @@ class ViralEditPipeline:
                 )
             else:
                 shutil.copy2(zoomed_path, broll_path)
-            generation.api_responses["broll_count"] = 0 if no_speech and not source_dark else len(inserts)
+            generation.api_responses["broll_count"] = 0 if no_speech else len(inserts)
 
             # 7) Font + karaoke + hook
             font_family = "Arial"

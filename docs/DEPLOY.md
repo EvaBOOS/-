@@ -79,8 +79,9 @@ Viral / AI-клипы принимают `source_url` (YouTube, Reels, TikTok и
 
 1. Экспорт cookies: Edge → расширение **Get cookies.txt LOCALLY** на youtube.com
 2. `cd backend && .\scripts\import_youtube_cookies.ps1`
-3. В `.env`: `YTDLP_COOKIES_FILE=./media/secrets/youtube_cookies.txt`
+3. В `.env`: `YTDLP_COOKIES_FILE=./secrets/youtube_cookies.txt` (не под `/media` — статика больше не отдаёт весь MEDIA_ROOT)
 4. Нужны Node.js ≥20 и пакеты `yt-dlp[default]`, `yt-dlp-ejs` (n-challenge)
+5. Прод: `ENVIRONMENT=production` + уникальный `SECRET_KEY` ≥32 символов (иначе API не стартует)
 
 ## Вирусный монтаж без речи
 

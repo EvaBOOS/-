@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Video Generator"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
+    # development | production — production refuses insecure default SECRET_KEY
+    ENVIRONMENT: str = "development"
     
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production-min-32-chars"
@@ -91,3 +93,29 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+_INSECURE_SECRET_KEYS = {
+    "your-secret-key-change-in-production-min-32-chars",
+    "dev-local-secret-key-change-in-prod-32c",
+    "change-me",
+    "secret",
+}
+
+
+def _validate_secret_key() -> None:
+    key = (settings.SECRET_KEY or "").strip()
+    env = (settings.ENVIRONMENT or "development").strip().lower()
+    weak = (not key) or (key in _INSECURE_SECRET_KEYS) or (len(key) < 32)
+    if env in {"production", "prod"} and weak:
+        raise RuntimeError(
+            "Insecure SECRET_KEY in production. Set ENVIRONMENT=production only with a "
+            "unique SECRET_KEY of at least 32 random characters."
+        )
+    if weak:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Using a weak/default SECRET_KEY — fine for local SQLite, unsafe for any public deploy."
+        )
+
+
+_validate_secret_key()

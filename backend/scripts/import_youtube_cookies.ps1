@@ -19,7 +19,7 @@ $ErrorActionPreference = "Stop"
 $BackendRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $BackendRoot
 
-$OutDir = Join-Path $BackendRoot "media\secrets"
+$OutDir = Join-Path $BackendRoot "secrets"
 $OutFile = Join-Path $OutDir "youtube_cookies.txt"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
@@ -70,7 +70,7 @@ Write-Host "Источник: $found" -ForegroundColor DarkGray
 $envPath = Join-Path $BackendRoot ".env"
 if (Test-Path $envPath) {
     $raw = Get-Content $envPath -Raw -Encoding UTF8
-    $cookieLine = "YTDLP_COOKIES_FILE=./media/secrets/youtube_cookies.txt"
+    $cookieLine = "YTDLP_COOKIES_FILE=./secrets/youtube_cookies.txt"
     if ($raw -match "(?m)^YTDLP_COOKIES_FILE=.*$") {
         $raw = [regex]::Replace($raw, "(?m)^YTDLP_COOKIES_FILE=.*$", $cookieLine)
     } else {

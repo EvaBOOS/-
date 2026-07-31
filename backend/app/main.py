@@ -88,9 +88,18 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.GENERATED_DIR, exist_ok=True)
+# Cookies live under backend/secrets (never mounted as static)
+os.makedirs(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "secrets")), exist_ok=True)
 
-if os.path.exists(settings.MEDIA_ROOT):
-    app.mount("/media", StaticFiles(directory=settings.MEDIA_ROOT), name="media")
+# Public static: ONLY branding watermarks (UI preview). Do NOT mount full MEDIA_ROOT —
+# that exposed youtube cookies + generated MP4s without auth.
+_wm_dir = os.path.join(settings.MEDIA_ROOT, "uploads", "watermarks")
+os.makedirs(_wm_dir, exist_ok=True)
+app.mount(
+    "/media/uploads/watermarks",
+    StaticFiles(directory=_wm_dir),
+    name="watermarks",
+)
 
 # Mount frontend static files (Docker: /app/frontend, local: <repo>/frontend)
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
