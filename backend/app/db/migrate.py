@@ -1,0 +1,39 @@
+"""Lightweight SQLite/Postgres column patches for evolving models."""
+from __future__ import annotations
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+async def ensure_schema_patches(engine: AsyncEngine, database_url: str) -> None:
+    """Add new columns if missing (create_all does not alter existing tables)."""
+    is_sqlite = database_url.startswith("sqlite")
+    patches = [
+        ("video_generations", "mode", "VARCHAR(32) DEFAULT 'avatar'"),
+        ("video_generations", "source_video_path", "VARCHAR(500)"),
+    ]
+
+    async with engine.begin() as conn:
+        for table, column, col_type in patches:
+            exists = await _column_exists(conn, table, column, is_sqlite)
+            if exists:
+                continue
+            await conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+            )
+
+
+async def _column_exists(conn, table: str, column: str, is_sqlite: bool) -> bool:
+    if is_sqlite:
+        result = await conn.execute(text(f"PRAGMA table_info({table})"))
+        rows = result.fetchall()
+        return any(r[1] == column for r in rows)
+
+    result = await conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = :table AND column_name = :column"
+        ),
+        {"table": table, "column": column},
+    )
+    return result.first() is not None

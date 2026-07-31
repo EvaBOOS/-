@@ -3,61 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client Dashboard - AI Video Generator</title>
-    <link rel="stylesheet" href="static/css/client.css">
+    <title>VideoGen — кабинет</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/dashboard/static/css/client.css">
 </head>
 <body>
     <div class="app-container">
-        <!-- Login Screen -->
         <div id="login-screen" class="screen active">
-            <div class="login-card">
-                <div class="logo">🎬</div>
-                <h1>AI Video Generator</h1>
-                <p class="subtitle">Личный кабинет</p>
-                <form id="login-form">
+            <div class="login-atmosphere" aria-hidden="true">
+                <span class="trinket t1"></span>
+                <span class="trinket t2"></span>
+                <span class="trinket t3"></span>
+                <div class="fog fog-a"></div>
+                <div class="fog fog-b"></div>
+            </div>
+            <div class="login-stage">
+                <p class="brand-mark">VideoGen</p>
+                <h1 class="login-title">Снимай коротко.<br>Говори громко.</h1>
+                <p class="login-lead">Личный кабинет для генерации роликов со сценарием, голосом и аватаром.</p>
+                <form id="login-form" class="login-form">
                     <div class="form-group">
                         <label for="email">Email</label>
-                        <input type="email" id="email" required placeholder="your@email.com">
+                        <input type="email" id="email" required placeholder="you@studio.com" autocomplete="username">
                     </div>
                     <div class="form-group">
                         <label for="password">Пароль</label>
-                        <input type="password" id="password" required placeholder="••••••••">
+                        <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password">
                     </div>
-                    <button type="submit" class="btn btn-primary">Войти</button>
+                    <button type="submit" class="btn btn-primary btn-block">Войти в студию</button>
                     <p id="login-error" class="error-message"></p>
                 </form>
             </div>
         </div>
 
-        <!-- Dashboard Screen -->
         <div id="dashboard-screen" class="screen">
             <nav class="sidebar">
                 <div class="sidebar-header">
-                    <span class="logo-text">🎬 VideoGen</span>
+                    <span class="logo-text">VideoGen</span>
+                    <span class="logo-tag">studio</span>
                 </div>
                 <ul class="nav-menu">
-                    <li class="nav-item active" data-page="generate">
-                        <span class="nav-icon">✨</span>
-                        <span>Создать видео</span>
-                    </li>
-                    <li class="nav-item" data-page="history">
-                        <span class="nav-icon">📁</span>
-                        <span>Мои видео</span>
-                    </li>
-                    <li class="nav-item" data-page="profile">
-                        <span class="nav-icon">👤</span>
-                        <span>Профиль</span>
-                    </li>
+                    <li class="nav-item active" data-page="generate"><span>Создать</span></li>
+                    <li class="nav-item" data-page="viral"><span>Вирусный монтаж</span></li>
+                    <li class="nav-item" data-page="clips"><span>AI-клипы</span></li>
+                    <li class="nav-item" data-page="radar"><span>Радар</span></li>
+                    <li class="nav-item" data-page="history"><span>Мои видео</span></li>
+                    <li class="nav-item" data-page="profile"><span>Профиль</span></li>
                 </ul>
                 <div class="sidebar-footer">
                     <div class="credits-badge">
-                        <span class="credits-icon">💎</span>
                         <span id="credits-count">0</span>
-                        <span>кредитов</span>
+                        <span class="credits-label">кредитов</span>
                     </div>
-                    <button id="logout-btn" class="btn btn-secondary">
-                        Выйти
-                    </button>
+                    <button id="logout-btn" class="btn btn-ghost">Выйти</button>
                 </div>
             </nav>
 
@@ -69,200 +69,397 @@
                     </div>
                 </header>
 
-                <!-- Generate Page -->
                 <div id="page-generate" class="page active">
                     <div class="generate-container">
-                        <div class="generate-card">
-                            <h3>📝 Введите текст сценария</h3>
-                            <p class="hint">Опишите свою идею или тему своими словами. ИИ преобразует её в вирусный сценарий.</p>
-                            
+                        <section class="generate-panel">
+                            <p class="eyebrow">Новый ролик</p>
+                            <h3>Исходный текст</h3>
+                            <p class="hint">Коротко опиши тему и тон — остальное соберёт пайплайн. Стикеры и шрифт подбираются сами по теме.</p>
                             <form id="generate-form">
                                 <div class="form-group">
-                                    <label for="script-text">Ваш текст</label>
-                                    <textarea 
-                                        id="script-text" 
-                                        rows="6" 
-                                        placeholder="Например: Расскажи о 5 способах заработка в интернете для начинающих. Тон дружелюбный, с юмором."
+                                    <label for="script-text">Текст</label>
+                                    <textarea
+                                        id="script-text"
+                                        rows="7"
+                                        placeholder="Например: кто выиграл ЧМ-2026 и почему жаль Месси — дружелюбным журналистским голосом"
                                         required
                                         minlength="10"
                                         maxlength="5000"
                                     ></textarea>
                                     <span class="char-count"><span id="char-count">0</span>/5000</span>
                                 </div>
-                                
                                 <div class="form-group">
-                                    <label for="language">Язык видео</label>
-                                    <select id="language">
-                                        <option value="ru">🇷🇺 Русский</option>
-                                        <option value="en">🇺🇸 English</option>
-                                        <option value="es">🇪🇸 Español</option>
-                                        <option value="de">🇩🇪 Deutsch</option>
-                                        <option value="fr">🇫🇷 Français</option>
-                                        <option value="it">🇮🇹 Italiano</option>
-                                        <option value="pt">🇧🇷 Português</option>
-                                        <option value="zh">🇨🇳 中文</option>
-                                        <option value="ja">🇯🇵 日本語</option>
-                                        <option value="ko">🇰🇷 한국어</option>
-                                        <option value="ar">🇸🇦 العربية</option>
-                                        <option value="hi">🇮🇳 हिन्दी</option>
+                                    <label for="language">Язык</label>
+                                    <div class="select-wrap">
+                                    <select id="language" class="select-ui">
+                                        <option value="ru">Русский</option>
+                                        <option value="en">English</option>
+                                        <option value="es">Español</option>
+                                        <option value="de">Deutsch</option>
+                                        <option value="fr">Français</option>
+                                        <option value="it">Italiano</option>
+                                        <option value="pt">Português</option>
+                                        <option value="zh">中文</option>
+                                        <option value="ja">日本語</option>
+                                        <option value="ko">한국어</option>
+                                        <option value="ar">العربية</option>
+                                        <option value="hi">हिन्दी</option>
                                     </select>
+                                    </div>
                                 </div>
-                                
                                 <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary btn-large">
-                                        <span class="btn-icon">🚀</span>
-                                        Создать видео
-                                    </button>
+                                    <button type="submit" class="btn btn-primary btn-large">Создать видео</button>
                                 </div>
-                                
                                 <p id="generate-error" class="error-message"></p>
                             </form>
-                        </div>
-                        
-                        <div class="info-card">
-                            <h4>Как это работает?</h4>
+                        </section>
+
+                        <aside class="pipeline-rail">
+                            <p class="eyebrow">Пайплайн</p>
                             <ol class="steps-list">
-                                <li>
-                                    <span class="step-icon">1️⃣</span>
-                                    <div>
-                                        <strong>GPT-4o</strong>
-                                        <p>Преобразует ваш текст в вирусный сценарий</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-icon">2️⃣</span>
-                                    <div>
-                                        <strong>ElevenLabs</strong>
-                                        <p>Озвучивает сценарий реалистичным голосом</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-icon">3️⃣</span>
-                                    <div>
-                                        <strong>HeyGen</strong>
-                                        <p>Создаёт видео с ИИ-аватаром и липсинком</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-icon">4️⃣</span>
-                                    <div>
-                                        <strong>Финал</strong>
-                                        <p>Добавляем субтитры и ваш логотип</p>
-                                    </div>
-                                </li>
+                                <li><strong>Сценарий</strong><span>AITUNNEL / LLM</span></li>
+                                <li><strong>Голос</strong><span>Edge TTS</span></li>
+                                <li><strong>Аватар</strong><span>HeyGen</span></li>
+                                <li><strong>Монтаж</strong><span>субтитры + стикеры</span></li>
                             </ol>
-                        </div>
+                        </aside>
                     </div>
                 </div>
 
-                <!-- History Page -->
+                <div id="page-viral" class="page">
+                    <div class="generate-container">
+                        <section class="generate-panel">
+                            <p class="eyebrow">AI-монтаж</p>
+                            <h3>Сделать вирусным</h3>
+                            <p class="hint">Стили блогерского монтажа, формат и опциональный дубляж. Можно без речи в ролике — тогда будет визуальный монтаж + музыка; текст озвучки можно добавить ниже.</p>
+                            <form id="viral-form">
+                                <div class="form-group">
+                                    <label for="viral-file">Видеофайл</label>
+                                    <input type="file" id="viral-file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv">
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-url">или ссылка</label>
+                                    <input type="url" id="viral-url" class="input-ui" placeholder="https://youtube.com/watch?v=… или Reels / TikTok" autocomplete="off">
+                                    <p class="hint">Файл или ссылка — одно из двух. Скачивание может занять минуту.</p>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-voiceover">Текст озвучки (опц.)</label>
+                                    <textarea id="viral-voiceover" class="input-ui" rows="3" placeholder="Если в видео нет речи — напиши текст, наложим TTS. Пусто = только визуал + музыка."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-language">Язык речи</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-language" class="select-ui">
+                                        <option value="ru">Русский</option>
+                                        <option value="en">English</option>
+                                        <option value="es">Español</option>
+                                        <option value="de">Deutsch</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-style">Стиль монтажа</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-style" class="select-ui">
+                                        <option value="dynamic">Динамичный</option>
+                                        <option value="minimal">Минималистичный</option>
+                                        <option value="ads">Рекламный</option>
+                                        <option value="beast">Как MrBeast</option>
+                                        <option value="hormozi">Как Hormozi</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-format">Формат</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-format" class="select-ui">
+                                        <option value="9:16">Reels / TikTok / Shorts (9:16)</option>
+                                        <option value="1:1">Instagram квадрат (1:1)</option>
+                                        <option value="16:9">YouTube (16:9)</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-dub">Дубляж (перевод озвучки)</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-dub" class="select-ui">
+                                        <option value="">Без перевода — исходный язык</option>
+                                        <option value="en">English</option>
+                                        <option value="ru">Русский</option>
+                                        <option value="es">Español</option>
+                                        <option value="de">Deutsch</option>
+                                        <option value="fr">Français</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-font">Шрифт субтитров</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-font" class="select-ui">
+                                        <option value="">Авто / из профиля</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary btn-large">Сделать вирусным</button>
+                                </div>
+                                <p id="viral-error" class="error-message"></p>
+                                <p id="viral-success" class="hint" style="display:none;"></p>
+                            </form>
+                        </section>
+                        <aside class="pipeline-rail">
+                            <p class="eyebrow">Пайплайн</p>
+                            <ol class="steps-list">
+                                <li><strong>Речь</strong><span>Whisper или silent / TTS</span></li>
+                                <li><strong>Формат</strong><span>9:16 / 1:1 / 16:9</span></li>
+                                <li><strong>Смысл</strong><span>B-roll + хук + стиль</span></li>
+                                <li><strong>Оценка</strong><span>вирусность + советы</span></li>
+                            </ol>
+                        </aside>
+                    </div>
+                </div>
+
+                <div id="page-clips" class="page">
+                    <div class="generate-container">
+                        <section class="generate-panel">
+                            <p class="eyebrow">Длинное видео</p>
+                            <h3>AI-клипы</h3>
+                            <p class="hint">Загрузи длинный ролик или вставь ссылку — ИИ найдёт яркие моменты и нарежет вертикальные Shorts 20–60 сек.</p>
+                            <form id="clips-form">
+                                <div class="form-group">
+                                    <label for="clips-file">Видеофайл</label>
+                                    <input type="file" id="clips-file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv">
+                                </div>
+                                <div class="form-group">
+                                    <label for="clips-url">или ссылка</label>
+                                    <input type="url" id="clips-url" class="input-ui" placeholder="https://youtube.com/watch?v=… (длинное видео)" autocomplete="off">
+                                    <p class="hint">Файл или ссылка. Лимит длинного ролика выше, чем у вирусного монтажа.</p>
+                                </div>
+                                <div class="form-group">
+                                    <label for="clips-language">Язык речи</label>
+                                    <div class="select-wrap">
+                                    <select id="clips-language" class="select-ui">
+                                        <option value="ru">Русский</option>
+                                        <option value="en">English</option>
+                                        <option value="es">Español</option>
+                                        <option value="de">Deutsch</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="clips-font">Шрифт субтитров</label>
+                                    <div class="select-wrap">
+                                    <select id="clips-font" class="select-ui">
+                                        <option value="">Авто / из профиля</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="clips-max">Сколько клипов</label>
+                                    <div class="select-wrap">
+                                    <select id="clips-max" class="select-ui">
+                                        <option value="3">3</option>
+                                        <option value="5" selected>5</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary btn-large">Нарезать клипы</button>
+                                </div>
+                                <p id="clips-error" class="error-message"></p>
+                                <p id="clips-success" class="hint" style="display:none;"></p>
+                            </form>
+                        </section>
+                        <aside class="pipeline-rail">
+                            <p class="eyebrow">Пайплайн</p>
+                            <ol class="steps-list">
+                                <li><strong>Речь</strong><span>Whisper по всему ролику</span></li>
+                                <li><strong>Моменты</strong><span>LLM выбирает хуки</span></li>
+                                <li><strong>Нарезка</strong><span>20–60 сек каждый</span></li>
+                                <li><strong>Shorts</strong><span>9:16 + субтитры</span></li>
+                            </ol>
+                        </aside>
+                    </div>
+                </div>
+
+                <div id="page-radar" class="page">
+                    <div class="generate-container">
+                        <section class="generate-panel">
+                            <p class="eyebrow">Исследование</p>
+                            <h3>Радар трендов</h3>
+                            <p class="hint">Смотрим, что залетает, и разбираем паттерны (хук, темп, стиль) — не копируем чужие ролики 1:1.</p>
+                            <div class="filters-bar crossword" style="margin-bottom:1rem;">
+                                <div class="select-wrap">
+                                    <select id="radar-platform" class="select-ui">
+                                        <option value="youtube">YouTube Shorts</option>
+                                        <option value="tiktok">TikTok (хештеги)</option>
+                                        <option value="instagram" disabled>Instagram — скоро</option>
+                                        <option value="vk" disabled>VK — скоро</option>
+                                    </select>
+                                </div>
+                                <div class="select-wrap">
+                                    <select id="radar-region" class="select-ui">
+                                        <option value="RU">RU</option>
+                                        <option value="US">US</option>
+                                        <option value="GB">GB</option>
+                                    </select>
+                                </div>
+                                <input type="text" id="radar-niche" class="input-ui" placeholder="Ниша (опц.): футбол, бизнес…" style="min-width:10rem;">
+                                <button type="button" id="radar-refresh-btn" class="btn btn-secondary">Обновить</button>
+                            </div>
+                            <p class="hint" style="margin-top:0.35rem;">YouTube: только Shorts (≤60 сек). TikTok Creative Center часто недоступен без VPN — можно вставить ссылку справа вручную.</p>
+                            <p id="radar-meta" class="hint"></p>
+                            <p id="radar-error" class="error-message"></p>
+                            <div id="radar-list" class="radar-list"></div>
+                        </section>
+                        <aside class="pipeline-rail">
+                            <p class="eyebrow">Разбор</p>
+                            <div id="radar-insight" class="radar-insight">
+                                <p class="hint">Выбери тренд или вставь ссылку на ролик ниже.</p>
+                            </div>
+                            <div class="form-group" style="margin-top:1rem;">
+                                <label for="radar-url">Ссылка на ролик</label>
+                                <input type="url" id="radar-url" class="input-ui" placeholder="https://youtube.com/shorts/… или TikTok">
+                            </div>
+                            <button type="button" id="radar-analyze-btn" class="btn btn-primary">Разобрать</button>
+                            <p id="radar-analyze-msg" class="hint" style="margin-top:0.5rem;"></p>
+                            <ol class="steps-list" style="margin-top:1.25rem;">
+                                <li><strong>Тренды</strong><span>YouTube API / TikTok CC</span></li>
+                                <li><strong>Скачать</strong><span>yt-dlp по ссылке</span></li>
+                                <li><strong>Изучить</strong><span>Whisper + LLM-паттерны</span></li>
+                                <li><strong>Применить</strong><span>в вирусный монтаж</span></li>
+                            </ol>
+                        </aside>
+                    </div>
+                </div>
+
                 <div id="page-history" class="page">
-                    <div class="filters-bar">
-                        <select id="status-filter">
+                    <div class="filters-bar crossword">
+                        <div class="select-wrap">
+                        <select id="status-filter" class="select-ui">
                             <option value="">Все статусы</option>
                             <option value="pending">Ожидание</option>
-                            <option value="script_generation">Генерация сценария</option>
+                            <option value="script_generation">Сценарий</option>
                             <option value="voice_synthesis">Озвучка</option>
-                            <option value="avatar_generation">Создание аватара</option>
-                            <option value="video_processing">Обработка видео</option>
+                            <option value="avatar_generation">Аватар</option>
+                            <option value="transcription">Распознавание</option>
+                            <option value="viral_edit">AI-монтаж</option>
+                            <option value="clipping">Нарезка клипов</option>
+                            <option value="video_processing">Обработка</option>
                             <option value="completed">Готово</option>
                             <option value="failed">Ошибка</option>
                         </select>
-                        <button id="refresh-btn" class="btn btn-secondary">🔄 Обновить</button>
+                        </div>
+                        <button id="refresh-btn" class="btn btn-ghost">Обновить</button>
                     </div>
-                    
-                    <div id="generations-list" class="generations-grid">
-                        <!-- Dynamic content -->
-                    </div>
-                    
-                    <div id="pagination" class="pagination">
-                        <!-- Dynamic content -->
-                    </div>
+                    <div id="generations-list" class="generations-grid"></div>
+                    <div id="pagination" class="pagination"></div>
                 </div>
 
-                <!-- Profile Page -->
                 <div id="page-profile" class="page">
                     <div class="profile-grid">
-                        <div class="profile-card">
-                            <h3>📊 Статистика</h3>
+                        <section class="profile-panel">
+                            <p class="eyebrow">Аккаунт</p>
+                            <h3>Статистика</h3>
                             <div class="stats-list">
-                                <div class="stat-item">
-                                    <span class="stat-label">Тариф</span>
-                                    <span class="stat-value" id="profile-plan">Basic</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Кредиты</span>
-                                    <span class="stat-value" id="profile-credits">0 / 15</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Использовано в этом месяце</span>
-                                    <span class="stat-value" id="profile-used">0</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Начало цикла</span>
-                                    <span class="stat-value" id="profile-cycle">-</span>
-                                </div>
+                                <div class="stat-item"><span class="stat-label">Тариф</span><span class="stat-value" id="profile-plan">Basic</span></div>
+                                <div class="stat-item"><span class="stat-label">Кредиты</span><span class="stat-value" id="profile-credits">0 / 15</span></div>
+                                <div class="stat-item"><span class="stat-label">За месяц</span><span class="stat-value" id="profile-used">0</span></div>
+                                <div class="stat-item"><span class="stat-label">Цикл с</span><span class="stat-value" id="profile-cycle">-</span></div>
+                                <div class="stat-item"><span class="stat-label">Экспорт</span><span class="stat-value" id="profile-watermark-policy">—</span></div>
                             </div>
-                        </div>
-                        
-                        <div class="profile-card">
-                            <h3>🎨 Брендинг</h3>
+                            <p id="profile-plan-hint" class="hint" style="margin-top:0.75rem;"></p>
+                        </section>
+                        <section class="profile-panel">
+                            <p class="eyebrow">Бренд</p>
+                            <h3>Оформление</h3>
                             <div class="branding-info">
                                 <div class="branding-item">
                                     <span class="branding-label">Логотип</span>
-                                    <div id="profile-watermark" class="branding-preview">
-                                        <span class="placeholder">Не загружен</span>
-                                    </div>
+                                    <div id="profile-watermark" class="branding-preview"><span class="placeholder">Не загружен</span></div>
                                 </div>
                                 <div class="branding-item">
                                     <span class="branding-label">Шрифт субтитров</span>
                                     <span class="branding-value" id="profile-font">Arial</span>
+
+                                    <div class="font-picker">
+                                        <span class="branding-label">Библиотека шрифтов</span>
+                                        <div id="profile-font-gallery" class="font-gallery" aria-label="Список шрифтов"></div>
+                                        <p id="profile-font-gallery-status" class="hint">Загрузка списка…</p>
+
+                                        <div class="font-preview-card">
+                                            <span class="branding-label">Превью</span>
+                                            <p id="profile-font-preview" class="font-preview-sample">
+                                                Аа Бб Вв Гг Дд Ее<br>
+                                                Aa Bb Cc Dd Ee Ff<br>
+                                                Снимай коротко. Говори громко.
+                                            </p>
+                                            <p id="profile-font-preview-meta" class="hint"></p>
+                                        </div>
+
+                                        <select id="profile-font-select" class="select-ui" hidden aria-hidden="true">
+                                            <option value="">—</option>
+                                        </select>
+                                        <button type="button" id="profile-apply-font-btn" class="btn btn-secondary">Применить выбранный</button>
+                                    </div>
+
+                                    <div class="font-upload">
+                                        <span class="branding-label">Загрузить свой (.ttf / .otf)</span>
+                                        <input type="file" id="profile-font-file" accept=".ttf,.otf,font/ttf,font/otf">
+                                        <input type="text" id="profile-font-family" class="input-ui" placeholder="Как назвать шрифт (необязательно)" title="Техническое имя для субтитров, например Perun. Если пусто — возьмём из имени файла.">
+                                        <p class="hint">«Имя» — как шрифт будет называться в ролике. Можно оставить пустым.</p>
+                                        <button type="button" id="profile-upload-font-btn" class="btn btn-secondary">Загрузить</button>
+                                        <p id="profile-font-msg" class="hint"></p>
+                                    </div>
                                 </div>
                                 <div class="branding-item">
-                                    <span class="branding-label">Цвет субтитров</span>
+                                    <span class="branding-label">Цвет</span>
                                     <span class="branding-value">
                                         <span id="profile-font-color-preview" class="color-preview"></span>
                                         <span id="profile-font-color">#FFFFFF</span>
                                     </span>
                                 </div>
                             </div>
-                            <p class="hint">Для изменения настроек брендинга обратитесь к администратору.</p>
-                        </div>
+                            <p class="hint">Брендинг меняет администратор.</p>
+                        </section>
                     </div>
                 </div>
 
-                <!-- Generation Detail Modal -->
                 <div id="generation-modal" class="modal">
                     <div class="modal-content">
                         <div class="modal-header">
                             <h3>Детали генерации</h3>
-                            <button class="modal-close">&times;</button>
+                            <button class="modal-close" type="button">&times;</button>
                         </div>
                         <div class="modal-body">
                             <div class="generation-status">
                                 <div class="status-badge" id="modal-status">Статус</div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" id="modal-progress"></div>
-                                </div>
+                                <div class="progress-bar"><div class="progress-fill" id="modal-progress"></div></div>
                                 <span class="progress-text" id="modal-progress-text">0%</span>
                             </div>
-                            
                             <div class="generation-details">
                                 <div class="detail-section">
                                     <h4>Исходный текст</h4>
                                     <p id="modal-original-text"></p>
                                 </div>
-                                
+                                <div class="detail-section" id="virality-section" style="display: none;">
+                                    <h4>Оценка вирусности</h4>
+                                    <p id="modal-virality-score" class="branding-value"></p>
+                                    <p id="modal-virality-summary" class="hint"></p>
+                                    <ul id="modal-virality-tips" class="steps-list"></ul>
+                                </div>
                                 <div class="detail-section" id="script-section" style="display: none;">
-                                    <h4>Сгенерированный сценарий</h4>
+                                    <h4>Сценарий</h4>
                                     <p id="modal-generated-script"></p>
                                 </div>
-                                
                                 <div class="detail-section" id="error-section" style="display: none;">
                                     <h4>Ошибка</h4>
                                     <p id="modal-error" class="error-text"></p>
                                 </div>
-                                
+                                <div class="detail-section" id="clips-section" style="display: none;">
+                                    <h4>Клипы</h4>
+                                    <ul id="modal-clips-list" class="steps-list"></ul>
+                                </div>
                                 <div class="detail-section" id="video-section" style="display: none;">
                                     <h4>Готовое видео</h4>
                                     <video id="modal-video" controls></video>
@@ -274,17 +471,14 @@
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary modal-close">Закрыть</button>
-                            <a id="download-btn" href="#" class="btn btn-primary" style="display: none;" download>
-                                📥 Скачать MP4
-                            </a>
+                            <button type="button" class="btn btn-ghost modal-close">Закрыть</button>
+                            <a id="download-btn" href="#" class="btn btn-primary" style="display: none;">Скачать MP4</a>
                         </div>
                     </div>
                 </div>
             </main>
         </div>
     </div>
-
-    <script src="static/js/client.js"></script>
+    <script src="/dashboard/static/js/client.js"></script>
 </body>
 </html>

@@ -3,56 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel - AI Video Generator</title>
-    <link rel="stylesheet" href="static/css/admin.css">
+    <title>VideoGen — админ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/admin/static/css/admin.css">
 </head>
 <body>
     <div class="app-container">
-        <!-- Login Screen -->
         <div id="login-screen" class="screen active">
-            <div class="login-card">
-                <div class="logo">🎬</div>
-                <h1>AI Video Generator</h1>
-                <p class="subtitle">Панель администратора</p>
-                <form id="login-form">
+            <div class="login-atmosphere" aria-hidden="true">
+                <span class="trinket t1"></span>
+                <span class="trinket t2"></span>
+                <div class="fog fog-a"></div>
+                <div class="fog fog-b"></div>
+            </div>
+            <div class="login-stage">
+                <p class="brand-mark">VideoGen</p>
+                <h1 class="login-title">Панель<br>администратора</h1>
+                <p class="login-lead">Клиенты, кредиты, брендинг и аватары.</p>
+                <form id="login-form" class="login-form">
                     <div class="form-group">
                         <label for="email">Email</label>
-                        <input type="email" id="email" required placeholder="admin@example.com">
+                        <input type="email" id="email" required placeholder="admin@example.com" autocomplete="username">
                     </div>
                     <div class="form-group">
                         <label for="password">Пароль</label>
-                        <input type="password" id="password" required placeholder="••••••••">
+                        <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password">
                     </div>
-                    <button type="submit" class="btn btn-primary">Войти</button>
+                    <button type="submit" class="btn btn-primary btn-block">Войти</button>
                     <p id="login-error" class="error-message"></p>
                 </form>
             </div>
         </div>
 
-        <!-- Main Dashboard -->
         <div id="dashboard-screen" class="screen">
             <nav class="sidebar">
                 <div class="sidebar-header">
-                    <span class="logo-text">🎬 AI VideoGen</span>
+                    <span class="logo-text">VideoGen</span>
+                    <span class="logo-tag">admin</span>
                 </div>
                 <ul class="nav-menu">
-                    <li class="nav-item active" data-page="overview">
-                        <span class="nav-icon">📊</span>
-                        <span>Обзор</span>
-                    </li>
-                    <li class="nav-item" data-page="clients">
-                        <span class="nav-icon">👥</span>
-                        <span>Клиенты</span>
-                    </li>
-                    <li class="nav-item" data-page="create-client">
-                        <span class="nav-icon">➕</span>
-                        <span>Новый клиент</span>
-                    </li>
+                    <li class="nav-item active" data-page="overview"><span>Обзор</span></li>
+                    <li class="nav-item" data-page="clients"><span>Клиенты</span></li>
+                    <li class="nav-item" data-page="create-client"><span>Новый клиент</span></li>
                 </ul>
                 <div class="sidebar-footer">
-                    <button id="logout-btn" class="btn btn-secondary">
-                        Выйти
-                    </button>
+                    <button id="logout-btn" class="btn btn-ghost">Выйти</button>
                 </div>
             </nav>
 
@@ -68,28 +65,28 @@
                 <div id="page-overview" class="page active">
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-icon">👥</div>
+                            <div class="stat-icon">01</div>
                             <div class="stat-info">
                                 <span class="stat-value" id="stat-clients">0</span>
                                 <span class="stat-label">Всего клиентов</span>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon">✅</div>
+                            <div class="stat-icon">02</div>
                             <div class="stat-info">
                                 <span class="stat-value" id="stat-active">0</span>
                                 <span class="stat-label">Активных</span>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon">🎬</div>
+                            <div class="stat-icon">03</div>
                             <div class="stat-info">
                                 <span class="stat-value" id="stat-videos">0</span>
                                 <span class="stat-label">Видео создано</span>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon">📈</div>
+                            <div class="stat-icon">04</div>
                             <div class="stat-info">
                                 <span class="stat-value" id="stat-success">0%</span>
                                 <span class="stat-label">Успешность</span>
@@ -224,11 +221,13 @@
                                     </div>
                                     <div class="form-group">
                                         <label>Тариф</label>
-                                        <select id="edit-plan">
+                                        <div class="select-wrap">
+                                        <select id="edit-plan" class="select-ui">
                                             <option value="basic">Basic (15 видео)</option>
                                             <option value="standard">Standard (30 видео)</option>
                                             <option value="premium">Premium (60 видео)</option>
                                         </select>
+                                        </div>
                                     </div>
                                     <div class="form-group">
                                         <label>ElevenLabs Voice ID</label>
@@ -255,16 +254,29 @@
                                     </div>
                                     <div class="form-group">
                                         <label>Позиция вотермарка</label>
-                                        <select id="edit-watermark-position">
+                                        <div class="select-wrap">
+                                        <select id="edit-watermark-position" class="select-ui">
                                             <option value="top_left">Сверху слева</option>
                                             <option value="top_right">Сверху справа</option>
                                             <option value="bottom_left">Снизу слева</option>
                                             <option value="bottom_right">Снизу справа</option>
                                         </select>
+                                        </div>
                                     </div>
                                     <div class="form-group">
-                                        <label>Шрифт субтитров</label>
+                                        <label>Шрифт субтитров (файл)</label>
                                         <input type="file" id="edit-font" accept=".ttf,.otf">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Или из библиотеки Google Fonts</label>
+                                        <div class="select-wrap">
+                                        <select id="edit-library-font" class="select-ui">
+                                            <option value="">— авто по теме видео —</option>
+                                        </select>
+                                        </div>
+                                        <button type="button" id="apply-library-font-btn" class="btn btn-secondary" style="margin-top:8px">
+                                            Применить шрифт из библиотеки
+                                        </button>
                                     </div>
                                     <div class="form-group">
                                         <label>Название шрифта</label>
@@ -313,6 +325,6 @@
         </div>
     </div>
 
-    <script src="static/js/admin.js"></script>
+    <script src="/admin/static/js/admin.js"></script>
 </body>
 </html>

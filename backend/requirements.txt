@@ -6,6 +6,7 @@ python-multipart==0.0.9
 # Database
 sqlalchemy==2.0.30
 asyncpg==0.29.0
+aiosqlite==0.20.0
 alembic==1.13.1
 psycopg2-binary==2.9.9
 
@@ -25,10 +26,13 @@ redis==5.0.4
 # AI Integrations
 openai==1.35.3
 elevenlabs==1.2.2
+edge-tts>=6.1.9
 
 # Video Processing
 ffmpeg-python==0.2.0
 Pillow==10.3.0
+yt-dlp[default]>=2025.11.12
+yt-dlp-ejs>=0.3.0
 
 # Utilities
 python-dotenv==1.0.1

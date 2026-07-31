@@ -1,0 +1,9 @@
+# Paths that often contain false positives (fixtures, vendored samples)
+backend/media/generated/
+backend/media/uploads/
+**/*.mp4
+**/*.mp3
+**/*.wav
+**/*.png
+**/*.jpg
+**/*.webp

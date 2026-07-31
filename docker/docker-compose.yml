@@ -48,10 +48,25 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-videogen}
       - DATABASE_URL_SYNC=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-videogen}
       - REDIS_URL=redis://redis:6379/0
+      - USE_CELERY=${USE_CELERY:-true}
       - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production-32chars}
+      - AITUNNEL_API_KEY=${AITUNNEL_API_KEY}
+      - AITUNNEL_BASE_URL=${AITUNNEL_BASE_URL:-https://api.aitunnel.ru/v1/}
+      - AITUNNEL_MODEL=${AITUNNEL_MODEL:-gemini-2.5-flash}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - HEYGEN_API_KEY=${HEYGEN_API_KEY}
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY}
+      - LINK_INGEST_ENABLED=${LINK_INGEST_ENABLED:-true}
+      - COBALT_API_URL=${COBALT_API_URL:-}
+      - COBALT_API_KEY=${COBALT_API_KEY:-}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - TRENDS_CACHE_HOURS=${TRENDS_CACHE_HOURS:-6}
+      - TRENDS_DEFAULT_REGION=${TRENDS_DEFAULT_REGION:-RU}
+      - TRENDS_ANALYZE_COST_CREDITS=${TRENDS_ANALYZE_COST_CREDITS:-1}
+      - TIKTOK_TRENDS_ENABLED=${TIKTOK_TRENDS_ENABLED:-true}
       - FIRST_ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme123}
       - MEDIA_ROOT=/app/media
@@ -81,16 +96,39 @@ services:
     command: celery -A app.celery_app worker --loglevel=info
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-videogen}
+      - DATABASE_URL_SYNC=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-videogen}
       - REDIS_URL=redis://redis:6379/0
+      - USE_CELERY=true
+      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production-32chars}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AITUNNEL_API_KEY=${AITUNNEL_API_KEY}
+      - AITUNNEL_BASE_URL=${AITUNNEL_BASE_URL:-https://api.aitunnel.ru/v1/}
+      - AITUNNEL_MODEL=${AITUNNEL_MODEL:-gemini-2.5-flash}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - HEYGEN_API_KEY=${HEYGEN_API_KEY}
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY}
+      - LINK_INGEST_ENABLED=${LINK_INGEST_ENABLED:-true}
+      - COBALT_API_URL=${COBALT_API_URL:-}
+      - COBALT_API_KEY=${COBALT_API_KEY:-}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - TRENDS_CACHE_HOURS=${TRENDS_CACHE_HOURS:-6}
+      - TRENDS_DEFAULT_REGION=${TRENDS_DEFAULT_REGION:-RU}
+      - TRENDS_ANALYZE_COST_CREDITS=${TRENDS_ANALYZE_COST_CREDITS:-1}
+      - TIKTOK_TRENDS_ENABLED=${TIKTOK_TRENDS_ENABLED:-true}
+      - MEDIA_ROOT=/app/media
+      - UPLOAD_DIR=/app/media/uploads
+      - GENERATED_DIR=/app/media/generated
     volumes:
       - media_data:/app/media
     depends_on:
-      - db
-      - redis
-      - app
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app:
+        condition: service_healthy
 
   # Nginx Reverse Proxy (optional, for production)
   nginx:

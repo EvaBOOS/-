@@ -350,6 +350,58 @@ async def upload_font(
     return {"message": "Font uploaded", "path": filepath}
 
 
+@router.get("/assets/fonts")
+async def list_library_fonts(
+    admin: User = Depends(get_current_admin),
+):
+    """Curated Google Fonts for client branding (auto-downloaded)."""
+    from app.services.assets.library_service import AssetLibraryService
+    return {"fonts": AssetLibraryService().list_fonts()}
+
+
+@router.post("/clients/{client_id}/branding/library-font")
+async def apply_library_font(
+    client_id: int,
+    font_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Download a Google Font into cache and set it as the client's subtitle font."""
+    from app.services.assets.library_service import AssetLibraryService
+
+    result = await db.execute(
+        select(ClientBranding).where(ClientBranding.client_id == client_id)
+    )
+    branding = result.scalar_one_or_none()
+    if not branding:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client branding not found",
+        )
+
+    lib = AssetLibraryService()
+    meta = lib.get_font_meta(font_id)
+    if not meta:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown font_id: {font_id}",
+        )
+
+    family, fonts_dir, font_file = await lib.ensure_font_file(font_id)
+    branding.subtitle_font_name = family
+    branding.subtitle_font_path = font_file
+    await db.commit()
+    await db.refresh(branding)
+
+    return {
+        "message": f"Font {family} applied",
+        "font_id": font_id,
+        "family": family,
+        "path": font_file,
+        "fonts_dir": fonts_dir,
+    }
+
+
 @router.get("/stats")
 async def get_stats(
     db: AsyncSession = Depends(get_db),

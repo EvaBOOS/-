@@ -17,20 +17,64 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/videogen"
     DATABASE_URL_SYNC: str = "postgresql://postgres:postgres@localhost:5432/videogen"
     
-    # Redis
+    # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"
+    # None = auto (Celery when not sqlite + Redis up); True/False force
+    USE_CELERY: Optional[bool] = None
     
     # AI API Keys
+    # Script LLM: AITUNNEL (preferred, ₽) → fallback OpenAI
+    AITUNNEL_API_KEY: Optional[str] = None
+    AITUNNEL_BASE_URL: str = "https://api.aitunnel.ru/v1/"
+    AITUNNEL_MODEL: str = "gemini-2.5-flash"
     OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4o-mini"
     ELEVENLABS_API_KEY: Optional[str] = None
+    # Voice fallback when ElevenLabs unavailable (blocked regions / no key)
+    EDGE_TTS_VOICE: str = "ru-RU-SvetlanaNeural"
     HEYGEN_API_KEY: Optional[str] = None
+    # HeyGen TTS voice (used only if audio upload fails). Must be a HeyGen voice_id, not Edge/Azure names.
+    HEYGEN_VOICE_ID: str = "5f99970adadb42398bf1aeb963a3888b"  # Dmitry (Russian)
+    # Default public avatar look (josh_lite3_* is retired)
+    HEYGEN_AVATAR_ID: str = "Abigail_expressive_2024112501"
+    # Solid backdrop behind avatar (studio looks often ship on white)
+    HEYGEN_BACKGROUND_COLOR: str = "#0B1220"
+    # Local sticker pack (Typiq PNGs / Twemoji). Relative to MEDIA_ROOT or absolute.
+    ASSETS_DIR: str = "./media/assets"
+    STICKERS_ENABLED: bool = True
+    # Auto-pick cool Google Fonts for subtitles when client has no custom font
+    AUTO_FONT_ENABLED: bool = True
+    # Free stock photos (optional — stickers/fonts work without these)
+    PEXELS_API_KEY: Optional[str] = None
+    UNSPLASH_ACCESS_KEY: Optional[str] = None
+    # Whisper model via AITUNNEL / OpenAI-compatible STT
+    WHISPER_MODEL: str = "whisper-1"
     
     # File Storage
     MEDIA_ROOT: str = "/workspace/media"
     UPLOAD_DIR: str = "/workspace/media/uploads"
     GENERATED_DIR: str = "/workspace/media/generated"
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
-    
+    MAX_VIRAL_UPLOAD_SIZE: int = 80 * 1024 * 1024  # 80MB source videos
+    MAX_CLIPS_UPLOAD_SIZE: int = 400 * 1024 * 1024  # 400MB long-form for AI clips
+    AI_CLIPS_MAX_COUNT: int = 5
+    # Import video by public URL (YouTube / Reels / TikTok …)
+    LINK_INGEST_ENABLED: bool = True
+    # Optional self-hosted Cobalt (https://github.com/imputnet/cobalt); yt-dlp used otherwise
+    COBALT_API_URL: Optional[str] = None
+    COBALT_API_KEY: Optional[str] = None
+    # yt-dlp auth for YouTube bot-check ("Sign in to confirm you're not a bot")
+    # Example: YTDLP_COOKIES_FROM_BROWSER=edge  or  chrome  or  chrome:Default
+    YTDLP_COOKIES_FROM_BROWSER: Optional[str] = None
+    # Or path to Netscape cookies.txt exported from browser
+    YTDLP_COOKIES_FILE: Optional[str] = None
+    # Trend radar
+    YOUTUBE_API_KEY: Optional[str] = None
+    TRENDS_CACHE_HOURS: int = 6
+    TRENDS_DEFAULT_REGION: str = "RU"
+    TRENDS_ANALYZE_COST_CREDITS: int = 1
+    TIKTOK_TRENDS_ENABLED: bool = True
+
     # Video Settings
     VIDEO_WIDTH: int = 1080
     VIDEO_HEIGHT: int = 1920

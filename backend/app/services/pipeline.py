@@ -11,25 +11,31 @@ from app.models.client import Client
 from app.models.generation import VideoGeneration, GenerationStatus
 from app.services.ai.openai_service import OpenAIService
 from app.services.ai.elevenlabs_service import ElevenLabsService
+from app.services.ai.edge_tts_service import EdgeTTSService
 from app.services.ai.heygen_service import HeyGenService
 from app.services.video.ffmpeg_service import FFmpegService
+from app.services.assets.library_service import AssetLibraryService
+from app.services.branding_watermark import resolve_export_watermark
 
 
 class VideoGenerationPipeline:
     """
     Orchestrates the complete video generation pipeline:
-    1. GPT-4o: Generate viral script from user text
-    2. ElevenLabs: Synthesize voice audio
+    1. LLM (AITUNNEL / OpenAI): Generate viral script from user text
+    2. Voice: ElevenLabs if key set, else Edge TTS (free, no geo block)
     3. HeyGen: Create avatar video with lip sync
-    4. FFmpeg: Add subtitles and watermark
+    4. FFmpeg: Add subtitles, watermark, auto stickers/fonts from asset library
     """
     
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.openai = OpenAIService()
+        self.openai = OpenAIService()  # AITUNNEL-first LLM wrapper
         self.elevenlabs = ElevenLabsService()
+        self.edge_tts = EdgeTTSService()
         self.heygen = HeyGenService()
         self.ffmpeg = FFmpegService()
+        self.assets = AssetLibraryService()
+        self.use_elevenlabs = bool(settings.ELEVENLABS_API_KEY)
         
     async def process(self, generation_id: int, client_id: int) -> Optional[str]:
         """
@@ -90,20 +96,28 @@ class VideoGenerationPipeline:
             
             await self._update_status(generation, GenerationStatus.VOICE_SYNTHESIS, progress=25)
             
-            voice_id = (
-                client.custom_voice_clone_id or 
-                client.elevenlabs_voice_id or 
-                "21m00Tcm4TlvDq8ikWAM"
-            )
-            
             audio_dir = os.path.join(settings.GENERATED_DIR, "audio", str(client_id))
             os.makedirs(audio_dir, exist_ok=True)
             
-            audio_path = await self.elevenlabs.synthesize_speech(
-                text=generated_script,
-                voice_id=voice_id,
-                output_dir=audio_dir
-            )
+            if self.use_elevenlabs:
+                voice_id = (
+                    client.custom_voice_clone_id
+                    or client.elevenlabs_voice_id
+                    or "21m00Tcm4TlvDq8ikWAM"
+                )
+                audio_path = await self.elevenlabs.synthesize_speech(
+                    text=generated_script,
+                    voice_id=voice_id,
+                    output_dir=audio_dir,
+                )
+            else:
+                voice_id = client.elevenlabs_voice_id or settings.EDGE_TTS_VOICE
+                audio_path = await self.edge_tts.synthesize_speech(
+                    text=generated_script,
+                    voice_id=voice_id,
+                    output_dir=audio_dir,
+                    language=generation.target_language,
+                )
             
             generation.audio_path = audio_path
             generation.progress_percent = 40
@@ -111,7 +125,7 @@ class VideoGenerationPipeline:
             
             await self._update_status(generation, GenerationStatus.AVATAR_GENERATION, progress=45)
             
-            avatar_id = client.heygen_avatar_id or "josh_lite3_20230714"
+            avatar_id = client.heygen_avatar_id or settings.HEYGEN_AVATAR_ID
             
             avatar_video_path = await self._generate_avatar_video(
                 script=generated_script,
@@ -126,34 +140,128 @@ class VideoGenerationPipeline:
             
             await self._update_status(generation, GenerationStatus.VIDEO_PROCESSING, progress=80)
             
-            audio_duration = self.ffmpeg.get_audio_duration(audio_path)
-            
-            srt_path = os.path.join(generation_dir, "subtitles.srt")
-            self.ffmpeg.generate_srt_from_text(
-                text=generated_script,
-                duration_seconds=audio_duration,
-                output_path=srt_path
-            )
-            
             final_video_path = os.path.join(generation_dir, f"final_{generation_id}.mp4")
-            
             branding = client.branding
-            
-            self.ffmpeg.add_subtitles_and_watermark(
-                video_path=avatar_video_path,
-                output_path=final_video_path,
-                subtitle_path=srt_path,
-                watermark_path=branding.watermark_path if branding else None,
-                watermark_position=branding.watermark_position if branding else "bottom_right",
-                watermark_opacity=branding.watermark_opacity if branding else 80,
-                watermark_scale=branding.watermark_scale if branding else 15,
-                subtitle_font=branding.subtitle_font_name if branding else "Arial",
-                subtitle_font_path=branding.subtitle_font_path if branding else None,
-                subtitle_font_size=branding.subtitle_font_size if branding else 48,
-                subtitle_font_color=branding.subtitle_font_color if branding else "white",
-                subtitle_bg_color=branding.subtitle_bg_color if branding else None,
-                subtitle_position=branding.subtitle_position if branding else "bottom"
-            )
+
+            try:
+                audio_duration = self.ffmpeg.get_audio_duration(audio_path)
+
+                # Auto library: stickers + cool font by topic (no manual downloads)
+                topic_blob = f"{generation.original_text or ''}\n{generated_script or ''}"
+                picked = await self.assets.auto_pick_for_video(topic_blob)
+                generation.api_responses = generation.api_responses or {}
+                generation.api_responses["assets"] = {
+                    "theme": picked.get("theme"),
+                    "font_id": picked.get("font_id"),
+                    "font_family": picked.get("font_family"),
+                    "stickers": len(picked.get("stickers") or []),
+                    "photo": bool(picked.get("photo_path")),
+                }
+                await self.db.commit()
+
+                srt_path = os.path.join(generation_dir, "subtitles.srt")
+                self.ffmpeg.generate_srt_from_text(
+                    text=generated_script,
+                    duration_seconds=audio_duration,
+                    output_path=srt_path
+                )
+
+                has_custom_font = bool(
+                    branding
+                    and branding.subtitle_font_path
+                    and os.path.isfile(branding.subtitle_font_path)
+                )
+                subtitle_font = (
+                    branding.subtitle_font_name if branding and branding.subtitle_font_name
+                    else "Arial"
+                )
+                subtitle_font_path = branding.subtitle_font_path if branding else None
+                subtitle_fonts_dir = None
+                if (
+                    settings.AUTO_FONT_ENABLED
+                    and not has_custom_font
+                    and picked.get("font_family")
+                ):
+                    subtitle_font = picked["font_family"]
+                    subtitle_fonts_dir = picked.get("fonts_dir")
+                    subtitle_font_path = None
+
+                wm = resolve_export_watermark(client)
+                wm_path = wm["path"] if wm else None
+                wm_pos = (wm or {}).get("position") or "bottom_right"
+                wm_opacity = int((wm or {}).get("opacity") or 80)
+                wm_scale = int((wm or {}).get("scale") or 15)
+                generation.api_responses = generation.api_responses or {}
+                generation.api_responses["watermark"] = {
+                    "kind": (wm or {}).get("kind"),
+                    "applied": bool(wm_path),
+                }
+
+                self.ffmpeg.add_subtitles_and_watermark(
+                    video_path=avatar_video_path,
+                    output_path=final_video_path,
+                    subtitle_path=srt_path,
+                    watermark_path=wm_path,
+                    watermark_position=wm_pos,
+                    watermark_opacity=wm_opacity,
+                    watermark_scale=wm_scale,
+                    subtitle_font=subtitle_font,
+                    subtitle_font_path=subtitle_font_path,
+                    subtitle_fonts_dir=subtitle_fonts_dir,
+                    subtitle_font_size=branding.subtitle_font_size if branding else 42,
+                    subtitle_font_color=branding.subtitle_font_color if branding else "white",
+                    subtitle_bg_color=branding.subtitle_bg_color if branding else None,
+                    subtitle_position=branding.subtitle_position if branding else "bottom"
+                )
+
+                if settings.STICKERS_ENABLED:
+                    stickers = list(picked.get("stickers") or [])
+                    # Themed Pexels photo as a soft plate behind emoji stickers
+                    if picked.get("photo_path") and os.path.isfile(picked["photo_path"]):
+                        stickers.insert(0, {
+                            "path": picked["photo_path"],
+                            "position": "top_right",
+                            "scale": 28,
+                            "opacity": 55,
+                        })
+                    if stickers:
+                        stickered = os.path.join(
+                            generation_dir, f"final_{generation_id}_stickers.mp4"
+                        )
+                        self.ffmpeg.overlay_stickers(
+                            video_path=final_video_path,
+                            output_path=stickered,
+                            stickers=stickers,
+                        )
+                        if os.path.isfile(stickered):
+                            os.replace(stickered, final_video_path)
+                    else:
+                        # Fallback: local Typiq pack if present
+                        stickers_dir = os.path.join(settings.ASSETS_DIR, "stickers")
+                        if os.path.isdir(stickers_dir):
+                            stickered = os.path.join(
+                                generation_dir, f"final_{generation_id}_stickers.mp4"
+                            )
+                            self.ffmpeg.overlay_stickers(
+                                video_path=final_video_path,
+                                output_path=stickered,
+                                stickers_dir=stickers_dir,
+                            )
+                            if os.path.isfile(stickered):
+                                os.replace(stickered, final_video_path)
+            except FileNotFoundError:
+                # FFmpeg/ffprobe missing — deliver HeyGen video as-is
+                import shutil
+                shutil.copy2(avatar_video_path, final_video_path)
+                audio_duration = 0
+            except Exception as post_err:
+                # Soft-fail post-processing so a successful avatar is not discarded
+                import shutil
+                if os.path.exists(avatar_video_path):
+                    shutil.copy2(avatar_video_path, final_video_path)
+                    audio_duration = 0
+                else:
+                    raise post_err
             
             generation.final_video_path = final_video_path
             generation.duration_seconds = int(audio_duration)
@@ -188,30 +296,32 @@ class VideoGenerationPipeline:
         output_dir: str
     ) -> str:
         """
-        Generate avatar video with lip sync.
-        
-        This method tries to use HeyGen with audio upload first,
-        falling back to text-based generation if needed.
+        Lip-sync avatar to our Edge/ElevenLabs audio (preferred).
+        Falls back to HeyGen TTS with a real HeyGen voice_id.
         """
+        errors = []
+
         try:
-            video_path = await self.heygen.create_video_from_script(
+            return await self.heygen.create_video_from_local_audio(
+                audio_path=audio_path,
+                avatar_id=avatar_id,
+                output_dir=output_dir,
+            )
+        except Exception as e:
+            errors.append(f"audio lipsync: {e}")
+
+        try:
+            return await self.heygen.create_video_from_script(
                 script=script,
                 avatar_id=avatar_id,
-                voice_id="en-US-JennyNeural",
-                output_dir=output_dir
+                voice_id=settings.HEYGEN_VOICE_ID,
+                output_dir=output_dir,
             )
-            
-            final_path = os.path.join(output_dir, f"avatar_{uuid.uuid4()}.mp4")
-            self.ffmpeg.combine_audio_video(
-                video_path=video_path,
-                audio_path=audio_path,
-                output_path=final_path
-            )
-            
-            return final_path
-            
         except Exception as e:
-            raise Exception(f"Avatar video generation failed: {str(e)}")
+            errors.append(f"script TTS: {e}")
+            raise Exception(
+                "Avatar video generation failed: " + " | ".join(errors)
+            )
     
     async def _update_status(
         self,

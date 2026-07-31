@@ -168,40 +168,40 @@ GET  /api/v1/client/generations/{id}/download - Скачивание видео
 
 ## 🚢 Развертывание
 
+Полный чеклист (Postgres/Redis/Celery, секреты, Linux hardening): **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
 ### Docker Compose (рекомендуется)
 
 ```bash
 cd docker
-
-# Создание .env файла
-cp .env.example .env
-nano .env  # Заполните все переменные
-
-# Запуск всех сервисов
-docker-compose up -d
-
-# Проверка статуса
-docker-compose ps
-
-# Просмотр логов
-docker-compose logs -f app
+cp .env.example .env   # заполните секреты
+docker compose up -d --build
+docker compose ps
+docker compose logs -f app celery_worker
 ```
+
+Генерации в Docker идут в **Celery** (`USE_CELERY=true`). Локально на SQLite — через FastAPI BackgroundTasks.
+
+### Локальный API (Windows)
+
+```powershell
+cd backend
+.\scripts\run_api.ps1
+```
+
+Один uvicorn **без** `--reload`.
 
 ### Production с Nginx
 
 ```bash
-# Запуск с Nginx reverse proxy
-docker-compose --profile production up -d
-
-# Настройка SSL (Let's Encrypt)
-# Добавьте сертификаты в docker/ssl/
+docker compose --profile production up -d
+# Сертификаты → docker/ssl/
 ```
 
 ### Масштабирование
 
 ```bash
-# Увеличение количества воркеров
-docker-compose up -d --scale celery_worker=3
+docker compose up -d --scale celery_worker=3
 ```
 
 ## ⚙️ Конфигурация
@@ -212,20 +212,25 @@ docker-compose up -d --scale celery_worker=3
 |------------|----------|--------------|
 | `DATABASE_URL` | PostgreSQL connection string | postgresql+asyncpg://... |
 | `REDIS_URL` | Redis connection string | redis://localhost:6379/0 |
+| `USE_CELERY` | Очередь Celery (`true`/`false`/auto) | auto |
 | `SECRET_KEY` | JWT secret key (мин. 32 символа) | - |
 | `OPENAI_API_KEY` | OpenAI API ключ | - |
 | `ELEVENLABS_API_KEY` | ElevenLabs API ключ | - |
 | `HEYGEN_API_KEY` | HeyGen API ключ | - |
+| `PEXELS_API_KEY` | Pexels (фото по теме, опционально) | - |
+| `UNSPLASH_ACCESS_KEY` | Unsplash (альтернатива фото) | - |
+| `STICKERS_ENABLED` | Автостикеры Twemoji по теме | true |
+| `AUTO_FONT_ENABLED` | Автошрифт Google Fonts по теме | true |
 | `FIRST_ADMIN_EMAIL` | Email администратора | admin@example.com |
 | `FIRST_ADMIN_PASSWORD` | Пароль администратора | changeme123 |
 
 ### Тарифные планы
 
-| План | Лимит видео/месяц |
-|------|-------------------|
-| Basic | 15 |
-| Standard | 30 |
-| Premium | 60 |
+| План | Лимит видео/месяц | Watermark |
+|------|-------------------|-----------|
+| Basic | 15 | VideoGen или ваш логотип |
+| Standard | 30 | Ваш логотип или лёгкий VideoGen |
+| Premium | 60 | Только ваш логотип (или чистое видео) |
 
 ## 📁 Структура проекта
 
@@ -278,6 +283,8 @@ docker-compose up -d --scale celery_worker=3
 - Rate limiting через Nginx
 - Валидация входных данных (Pydantic)
 - CORS настройки
+- CI: TruffleHog secret scan (`.github/workflows/secret-scan.yml`)
+- См. также [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ## 📞 Поддержка
 

@@ -9,7 +9,7 @@ class ClientBrandingBase(BaseModel):
     watermark_opacity: int = Field(80, ge=0, le=100)
     watermark_scale: int = Field(15, ge=5, le=50)
     subtitle_font_name: str = "Arial"
-    subtitle_font_size: int = Field(48, ge=12, le=120)
+    subtitle_font_size: int = Field(42, ge=12, le=120)
     subtitle_font_color: str = "#FFFFFF"
     subtitle_bg_color: Optional[str] = None
     subtitle_position: str = "bottom"

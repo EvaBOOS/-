@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from app.models.generation import GenerationStatus
 
@@ -18,8 +18,10 @@ class GenerationStatusUpdate(BaseModel):
 class GenerationResponse(BaseModel):
     id: int
     client_id: int
+    mode: str = "avatar"
     original_text: str
     target_language: str
+    source_video_path: Optional[str] = None
     generated_script: Optional[str] = None
     status: GenerationStatus
     error_message: Optional[str] = None
@@ -28,6 +30,7 @@ class GenerationResponse(BaseModel):
     duration_seconds: Optional[int] = None
     file_size_bytes: Optional[int] = None
     credit_deducted: bool
+    api_responses: Optional[Dict[str, Any]] = None
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

@@ -188,14 +188,59 @@ async function openClientModal(clientId) {
             document.getElementById('edit-font-size').value = client.branding.subtitle_font_size;
             document.getElementById('edit-font-color').value = client.branding.subtitle_font_color;
         }
+
+        await loadLibraryFonts();
         
         document.getElementById('current-credits').textContent = client.credits_remaining;
         document.getElementById('used-credits').textContent = client.credits_used_this_month;
+        
+        ['edit-plan', 'edit-watermark-position', 'edit-library-font'].forEach((id) => {
+            document.getElementById(id)?.dispatchEvent(new Event('change', { bubbles: true }));
+        });
         
         document.getElementById('client-modal').classList.add('active');
         showTab('general');
     } catch (e) {
         alert('Ошибка загрузки данных клиента: ' + e.message);
+    }
+}
+
+async function loadLibraryFonts() {
+    const select = document.getElementById('edit-library-font');
+    if (!select) return;
+    try {
+        const data = await api('/admin/assets/fonts');
+        const current = select.value;
+        select.innerHTML = '<option value="">— авто по теме видео —</option>';
+        (data.fonts || []).forEach((f) => {
+            const opt = document.createElement('option');
+            opt.value = f.id;
+            opt.textContent = `${f.label} · ${f.vibe}${f.cached ? ' ✓' : ''}`;
+            select.appendChild(opt);
+        });
+        if (current) select.value = current;
+    } catch (e) {
+        console.warn('Library fonts unavailable', e);
+    }
+}
+
+async function applyLibraryFont() {
+    if (!currentClientId) return;
+    const fontId = document.getElementById('edit-library-font')?.value;
+    if (!fontId) {
+        alert('Выберите шрифт из списка');
+        return;
+    }
+    try {
+        const data = await api(
+            `/admin/clients/${currentClientId}/branding/library-font?font_id=${encodeURIComponent(fontId)}`,
+            { method: 'POST', body: '{}' }
+        );
+        document.getElementById('edit-font-name').value = data.family;
+        alert(data.message || 'Шрифт применён');
+        await loadLibraryFonts();
+    } catch (e) {
+        alert('Не удалось применить шрифт: ' + e.message);
     }
 }
 
@@ -315,8 +360,99 @@ async function uploadFile(clientId, type) {
     }
 }
 
+function enhanceCustomSelects(root = document) {
+    root.querySelectorAll('select.select-ui').forEach((select) => {
+        if (select.dataset.enhanced === '1') return;
+
+        let wrap = select.closest('.select-wrap');
+        if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.className = 'select-wrap';
+            select.parentNode.insertBefore(wrap, select);
+            wrap.appendChild(select);
+        }
+
+        select.dataset.enhanced = '1';
+        wrap.classList.add('select-enhanced');
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'select-trigger';
+        trigger.setAttribute('aria-haspopup', 'listbox');
+
+        const label = document.createElement('span');
+        label.className = 'select-trigger-label';
+        const arrow = document.createElement('span');
+        arrow.className = 'select-trigger-arrow';
+        arrow.setAttribute('aria-hidden', 'true');
+        trigger.append(label, arrow);
+
+        const menu = document.createElement('ul');
+        menu.className = 'select-menu';
+        menu.setAttribute('role', 'listbox');
+
+        const syncLabel = () => {
+            const selected = select.options[select.selectedIndex];
+            label.textContent = selected ? selected.textContent : 'Выбрать';
+            menu.querySelectorAll('.select-option').forEach((item) => {
+                item.classList.toggle('is-selected', item.dataset.value === select.value);
+            });
+        };
+
+        const buildOptions = () => {
+            menu.innerHTML = '';
+            Array.from(select.options).forEach((opt) => {
+                const item = document.createElement('li');
+                item.className = 'select-option';
+                item.dataset.value = opt.value;
+                item.setAttribute('role', 'option');
+                item.textContent = opt.textContent;
+                item.addEventListener('click', () => {
+                    select.value = opt.value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    syncLabel();
+                    wrap.classList.remove('is-open');
+                    trigger.setAttribute('aria-expanded', 'false');
+                });
+                menu.appendChild(item);
+            });
+            syncLabel();
+        };
+
+        buildOptions();
+        wrap.append(trigger, menu);
+
+        trigger.addEventListener('click', (e) => {
+            e.preventDefault();
+            const willOpen = !wrap.classList.contains('is-open');
+            document.querySelectorAll('.select-wrap.is-open').forEach((openWrap) => {
+                if (openWrap !== wrap) {
+                    openWrap.classList.remove('is-open');
+                    openWrap.querySelector('.select-trigger')?.setAttribute('aria-expanded', 'false');
+                }
+            });
+            wrap.classList.toggle('is-open', willOpen);
+            trigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        });
+
+        select.addEventListener('change', syncLabel);
+    });
+
+    if (!document.body.dataset.selectOutsideBound) {
+        document.body.dataset.selectOutsideBound = '1';
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.select-wrap')) return;
+            document.querySelectorAll('.select-wrap.is-open').forEach((wrap) => {
+                wrap.classList.remove('is-open');
+                wrap.querySelector('.select-trigger')?.setAttribute('aria-expanded', 'false');
+            });
+        });
+    }
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', async () => {
+    enhanceCustomSelects();
     // Check authentication
     const isAuthenticated = await checkAuth();
     if (isAuthenticated) {
@@ -405,6 +541,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('edit-font').addEventListener('change', () => {
         if (currentClientId) uploadFile(currentClientId, 'font');
     });
+
+    document.getElementById('apply-library-font-btn')?.addEventListener('click', applyLibraryFont);
     
     // Close modal on outside click
     document.getElementById('client-modal').addEventListener('click', (e) => {

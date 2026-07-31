@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, admin, client
+from app.api.v1.endpoints import auth, admin, client, trends
 
 api_router = APIRouter()
 
@@ -19,4 +19,10 @@ api_router.include_router(
     client.router,
     prefix="/client",
     tags=["Client Dashboard"]
+)
+
+api_router.include_router(
+    trends.router,
+    prefix="/client",
+    tags=["Trend Radar"]
 )
