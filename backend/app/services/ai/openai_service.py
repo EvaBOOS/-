@@ -30,10 +30,14 @@ class OpenAIService:
                 "or OPENAI_API_KEY in .env"
             )
 
-    def _brain_block(self, domains: list[str]) -> str:
+    def _brain_block(
+        self,
+        domains: list[str],
+        prefer_tags: list[str] | None = None,
+    ) -> str:
         try:
             from app.services.brain import get_brain
-            return get_brain().get_prompt_block(domains)
+            return get_brain().get_prompt_block(domains, prefer_tags=prefer_tags)
         except Exception:
             return ""
 
@@ -281,6 +285,12 @@ Output only the spoken script in {target_language}."""
             "Each clip must be 20-60 seconds. Prefer hooks, surprising claims, clear stories, CTAs. "
             "Avoid silence/filler intros. No markdown."
         )
+        brain_block = self._brain_block(
+            ["hooks", "editing", "storytelling"],
+            prefer_tags=["long_to_short", "clips"],
+        )
+        if brain_block:
+            system_prompt = f"{system_prompt}\n\n{brain_block}"
         user_prompt = (
             f"Language: {language}\nTotal duration: {duration:.1f}s\n"
             f"Transcript:\n{transcript[:6000]}\n\n"

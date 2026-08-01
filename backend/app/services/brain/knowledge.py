@@ -51,11 +51,13 @@ class BrainService:
         self,
         domains: List[str],
         max_rules: Optional[int] = None,
+        prefer_tags: Optional[List[str]] = None,
     ) -> List[Dict[str, str]]:
         limit = max_rules if max_rules is not None else int(
             getattr(settings, "BRAIN_MAX_RULES", 12) or 12
         )
         limit = max(1, min(limit, 40))
+        prefer = {t.strip().lower() for t in (prefer_tags or []) if t}
         collected: List[Dict[str, str]] = []
         per_domain = max(1, limit // max(len(domains), 1))
 
@@ -64,12 +66,32 @@ class BrainService:
             if not pack:
                 continue
             rules = pack.get("rules") if isinstance(pack.get("rules"), list) else []
-            for rule in rules[:per_domain]:
+            preferred: List[Dict[str, Any]] = []
+            general: List[Dict[str, Any]] = []
+            for rule in rules:
                 if not isinstance(rule, dict):
                     continue
                 text = str(rule.get("text") or "").strip()
                 if not text:
                     continue
+                tags = {
+                    str(t).strip().lower()
+                    for t in (rule.get("tags") or [])
+                    if t
+                }
+                bucket = preferred if (prefer and tags & prefer) else general
+                bucket.append(rule)
+
+            # Mix: prefer tagged rules first (e.g. long_to_short), then fill with base.
+            ordered = preferred + general
+            take = ordered[:per_domain]
+            # If prefer tags exist, ensure at least ~half slot for them when available.
+            if prefer and preferred:
+                half = max(1, per_domain // 2)
+                take = (preferred[:half] + general[: max(0, per_domain - half)])[:per_domain]
+
+            for rule in take:
+                text = str(rule.get("text") or "").strip()
                 collected.append(
                     {
                         "domain": str(pack.get("domain") or domain),
@@ -85,11 +107,12 @@ class BrainService:
         self,
         domains: List[str],
         max_rules: Optional[int] = None,
+        prefer_tags: Optional[List[str]] = None,
     ) -> str:
         """Compact bullet list for system prompts. Empty if disabled/missing."""
         if not self.enabled:
             return ""
-        rules = self.get_rules(domains, max_rules=max_rules)
+        rules = self.get_rules(domains, max_rules=max_rules, prefer_tags=prefer_tags)
         if not rules:
             return ""
         lines = ["VideoGen Brain rules (follow when relevant; silent/factual guards still win):"]
