@@ -178,8 +178,8 @@ Output only the spoken script in {target_language}."""
             f"Style guide: {style_hint}"
         )
         brain_block = self._brain_block(
-            ["hooks", "editing"],
-            prefer_tags=["shorts_viral", "retention", "pace"],
+            ["hooks", "editing", "platforms"],
+            prefer_tags=["shorts_viral", "retention", "pace", "reels", "tiktok"],
         )
         if brain_block:
             system_prompt = f"{system_prompt}\n\n{brain_block}"
@@ -289,8 +289,8 @@ Output only the spoken script in {target_language}."""
             "Avoid silence/filler intros. No markdown."
         )
         brain_block = self._brain_block(
-            ["hooks", "editing", "storytelling"],
-            prefer_tags=["long_to_short", "clips", "shorts_viral"],
+            ["hooks", "editing", "storytelling", "platforms"],
+            prefer_tags=["long_to_short", "clips", "shorts_viral", "tiktok", "reels"],
         )
         if brain_block:
             system_prompt = f"{system_prompt}\n\n{brain_block}"

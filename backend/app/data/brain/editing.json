@@ -1,6 +1,6 @@
 {
   "domain": "editing",
-  "version": 3,
+  "version": 4,
   "rules": [
     {
       "id": "e01",
@@ -362,6 +362,53 @@
       "tags": [
         "shorts_viral",
         "qa"
+      ]
+    },
+    {
+      "id": "e47",
+      "text": "Контент должен работать без звука: титры и визуал несут смысл (многие смотрят mute).",
+      "tags": [
+        "reels",
+        "tiktok",
+        "captions",
+        "mute"
+      ]
+    },
+    {
+      "id": "e48",
+      "text": "Меняй визуал каждые 2–4с: jump cuts, зумы, смена угла — экран не должен «замирать».",
+      "tags": [
+        "reels",
+        "tiktok",
+        "pace"
+      ]
+    },
+    {
+      "id": "e49",
+      "text": "Микро-урок: один тезис на ролик; длинное режь на серию частей с высоким completion.",
+      "tags": [
+        "reels",
+        "tiktok",
+        "structure"
+      ]
+    },
+    {
+      "id": "e50",
+      "text": "Репёрпоз: не копируй 1:1 между платформами — подгони ритм, длину и native audio.",
+      "tags": [
+        "repurpose",
+        "reels",
+        "tiktok"
+      ]
+    },
+    {
+      "id": "e51",
+      "text": "Образовательный short: хук → проблема (4–10с) → решение шагами → чёткий takeaway.",
+      "tags": [
+        "reels",
+        "tiktok",
+        "structure",
+        "edu"
       ]
     }
   ]
