@@ -30,6 +30,13 @@ class OpenAIService:
                 "or OPENAI_API_KEY in .env"
             )
 
+    def _brain_block(self, domains: list[str]) -> str:
+        try:
+            from app.services.brain import get_brain
+            return get_brain().get_prompt_block(domains)
+        except Exception:
+            return ""
+
     async def _chat_completion(
         self,
         system_prompt: str,
@@ -105,6 +112,9 @@ HARD RULES (facts):
 4. You may rephrase, compress, and add light emotional color (e.g. sympathy for Messi) ONLY around facts the user already gave.
 5. Keep a short hook, clear body, soft CTA (comment/question). 100–300 words.
 6. Language: {target_language}. No stage directions, timestamps, or labels — ONLY spoken script."""
+        brain_block = self._brain_block(["hooks", "storytelling"])
+        if brain_block:
+            system_prompt = f"{system_prompt}\n\n{brain_block}"
 
         user_prompt = f"""Rewrite this as a friendly journalist short-form script.
 Preserve meaning; invent nothing factual beyond the brief.
@@ -163,6 +173,9 @@ Output only the spoken script in {target_language}."""
             "mood: one of calm, energetic, motivational, dramatic. "
             f"Style guide: {style_hint}"
         )
+        brain_block = self._brain_block(["hooks", "editing"])
+        if brain_block:
+            system_prompt = f"{system_prompt}\n\n{brain_block}"
         user_prompt = (
             f"Language: {language}\nStyle: {style}\nDuration: {duration:.2f}s\n"
             f"Transcript:\n{transcript}\n\n"

@@ -437,3 +437,18 @@ async def get_stats(
         "successful_generations": successful_generations,
         "success_rate": round(successful_generations / total_generations * 100, 2) if total_generations > 0 else 0
     }
+
+
+@router.get("/brain")
+async def list_brain_domains(
+    admin: User = Depends(get_current_admin),
+):
+    """List VideoGen Brain knowledge domains (seed JSON rule packs)."""
+    from app.services.brain import get_brain
+
+    brain = get_brain()
+    return {
+        "enabled": brain.enabled,
+        "max_rules": settings.BRAIN_MAX_RULES,
+        "domains": brain.list_domains(),
+    }

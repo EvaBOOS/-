@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     TRENDS_ANALYZE_COST_CREDITS: int = 1
     TIKTOK_TRENDS_ENABLED: bool = True
 
+    # VideoGen Brain — structured rules injected into LLM prompts
+    BRAIN_ENABLED: bool = True
+    BRAIN_MAX_RULES: int = 12
+
     # Video Settings
     VIDEO_WIDTH: int = 1080
     VIDEO_HEIGHT: int = 1920
