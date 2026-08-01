@@ -177,7 +177,10 @@ Output only the spoken script in {target_language}."""
             "mood: one of calm, energetic, motivational, dramatic. "
             f"Style guide: {style_hint}"
         )
-        brain_block = self._brain_block(["hooks", "editing"])
+        brain_block = self._brain_block(
+            ["hooks", "editing"],
+            prefer_tags=["shorts_viral", "retention", "pace"],
+        )
         if brain_block:
             system_prompt = f"{system_prompt}\n\n{brain_block}"
         user_prompt = (
@@ -287,7 +290,7 @@ Output only the spoken script in {target_language}."""
         )
         brain_block = self._brain_block(
             ["hooks", "editing", "storytelling"],
-            prefer_tags=["long_to_short", "clips"],
+            prefer_tags=["long_to_short", "clips", "shorts_viral"],
         )
         if brain_block:
             system_prompt = f"{system_prompt}\n\n{brain_block}"
