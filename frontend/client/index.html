@@ -89,6 +89,24 @@
                                     <span class="char-count"><span id="char-count">0</span>/5000</span>
                                 </div>
                                 <div class="form-group">
+                                    <label for="product-url">Ссылка на товар / лендинг (опц.)</label>
+                                    <input type="url" id="product-url" class="input-ui" placeholder="https://… — подтянем УТП в сценарий" autocomplete="off">
+                                    <p class="hint">Со страницы соберём краткий бриф и вшьём в сценарий. Можно оставить пустым.</p>
+                                </div>
+                                <div class="form-group">
+                                    <label for="avatar-genre">Жанр сценария</label>
+                                    <div class="select-wrap">
+                                    <select id="avatar-genre" class="select-ui">
+                                        <option value="default">Обычный</option>
+                                        <option value="ugc">UGC / отзыв</option>
+                                        <option value="tutorial">Туториал</option>
+                                        <option value="hook_battle">Хук-спор</option>
+                                        <option value="review">Обзор</option>
+                                        <option value="unboxing">Анбоксинг</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
                                     <label for="language">Язык</label>
                                     <div class="select-wrap">
                                     <select id="language" class="select-ui">
@@ -117,9 +135,9 @@
                         <aside class="pipeline-rail">
                             <p class="eyebrow">Пайплайн</p>
                             <ol class="steps-list">
-                                <li><strong>Сценарий</strong><span>AITUNNEL / LLM</span></li>
-                                <li><strong>Голос</strong><span>Edge TTS</span></li>
-                                <li><strong>Аватар</strong><span>HeyGen</span></li>
+                                <li><strong>Сценарий</strong><span>ИИ-текст</span></li>
+                                <li><strong>Голос</strong><span>озвучка</span></li>
+                                <li><strong>Аватар</strong><span>говорящий образ</span></li>
                                 <li><strong>Монтаж</strong><span>субтитры + стикеры</span></li>
                             </ol>
                         </aside>
@@ -131,7 +149,7 @@
                         <section class="generate-panel">
                             <p class="eyebrow">AI-монтаж</p>
                             <h3>Сделать вирусным</h3>
-                            <p class="hint">Стили блогерского монтажа, формат и опциональный дубляж. Можно без речи в ролике — тогда будет визуальный монтаж + музыка; текст озвучки можно добавить ниже.</p>
+                            <p class="hint">Стили блогерского монтажа, платформа, Lite/Full и жанр. Можно без речи — визуал + музыка; озвучку добавьте ниже.</p>
                             <form id="viral-form">
                                 <div class="form-group">
                                     <label for="viral-file">Видеофайл</label>
@@ -158,6 +176,39 @@
                                     </div>
                                 </div>
                                 <div class="form-group">
+                                    <label for="viral-platform">Платформа</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-platform" class="select-ui">
+                                        <option value="auto">Авто</option>
+                                        <option value="shorts">YouTube Shorts</option>
+                                        <option value="reels">Instagram Reels</option>
+                                        <option value="tiktok">TikTok</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-intensity">Глубина монтажа</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-intensity" class="select-ui">
+                                        <option value="full" selected>Полный (зумы + B-roll + стикеры)</option>
+                                        <option value="lite">Лёгкий (кроп + субтитры + хук)</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-genre">Жанр</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-genre" class="select-ui">
+                                        <option value="default">Обычный</option>
+                                        <option value="ugc">UGC / отзыв</option>
+                                        <option value="tutorial">Туториал</option>
+                                        <option value="hook_battle">Хук-спор</option>
+                                        <option value="review">Обзор</option>
+                                        <option value="unboxing">Анбоксинг</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
                                     <label for="viral-style">Стиль монтажа</label>
                                     <div class="select-wrap">
                                     <select id="viral-style" class="select-ui">
@@ -166,6 +217,16 @@
                                         <option value="ads">Рекламный</option>
                                         <option value="beast">Как MrBeast</option>
                                         <option value="hormozi">Как Hormozi</option>
+                                    </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="viral-hooks">Варианты хука (A/B)</label>
+                                    <div class="select-wrap">
+                                    <select id="viral-hooks" class="select-ui">
+                                        <option value="1" selected>1 — основной</option>
+                                        <option value="2">2 варианта</option>
+                                        <option value="3">3 варианта</option>
                                     </select>
                                     </div>
                                 </div>
@@ -224,7 +285,7 @@
                         <section class="generate-panel">
                             <p class="eyebrow">Длинное видео</p>
                             <h3>AI-клипы</h3>
-                            <p class="hint">Загрузи длинный ролик или вставь ссылку — ИИ найдёт яркие моменты и нарежет вертикальные Shorts 20–60 сек.</p>
+                            <p class="hint">YouTube → пачка клипов: ИИ найдёт моменты (хук / punchline / CTA), нарежет вертикаль под Shorts / Reels / TikTok.</p>
                             <form id="clips-form">
                                 <div class="form-group">
                                     <label for="clips-file">Видеофайл</label>
@@ -234,6 +295,17 @@
                                     <label for="clips-url">или ссылка</label>
                                     <input type="url" id="clips-url" class="input-ui" placeholder="https://youtube.com/watch?v=… (длинное видео)" autocomplete="off">
                                     <p class="hint">Файл или ссылка. Лимит длинного ролика выше, чем у вирусного монтажа.</p>
+                                </div>
+                                <div class="form-group">
+                                    <label for="clips-platform">Платформа</label>
+                                    <div class="select-wrap">
+                                    <select id="clips-platform" class="select-ui">
+                                        <option value="auto">Авто</option>
+                                        <option value="shorts">YouTube Shorts</option>
+                                        <option value="reels">Instagram Reels</option>
+                                        <option value="tiktok">TikTok</option>
+                                    </select>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label for="clips-language">Язык речи</label>
@@ -307,7 +379,7 @@
                                 <input type="text" id="radar-niche" class="input-ui" placeholder="Ниша (опц.): футбол, бизнес…" style="min-width:10rem;">
                                 <button type="button" id="radar-refresh-btn" class="btn btn-secondary">Обновить</button>
                             </div>
-                            <p class="hint" style="margin-top:0.35rem;">YouTube: только Shorts (≤60 сек). TikTok Creative Center часто недоступен без VPN — можно вставить ссылку справа вручную.</p>
+                            <p class="hint" style="margin-top:0.35rem;">YouTube: только Shorts (≤60 сек). Если лента TikTok не подгрузилась — вставьте ссылку на ролик справа вручную.</p>
                             <p id="radar-meta" class="hint"></p>
                             <p id="radar-error" class="error-message"></p>
                             <div id="radar-list" class="radar-list"></div>
@@ -459,6 +531,10 @@
                                 <div class="detail-section" id="clips-section" style="display: none;">
                                     <h4>Клипы</h4>
                                     <ul id="modal-clips-list" class="steps-list"></ul>
+                                </div>
+                                <div class="detail-section" id="hooks-section" style="display: none;">
+                                    <h4>Варианты хука (A/B)</h4>
+                                    <ul id="modal-hooks-list" class="steps-list"></ul>
                                 </div>
                                 <div class="detail-section" id="video-section" style="display: none;">
                                     <h4>Готовое видео</h4>

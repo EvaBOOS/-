@@ -6,6 +6,7 @@
 - Радар: YouTube Shorts
 - Silent-видео без кликбейта и чужого B-roll
 - **Мозг VideoGen (MVP-1)** — JSON-правила `hooks` / `editing` / `storytelling` в `backend/app/data/brain/`, подмешиваются в LLM (`plan_viral_edit`, `generate_viral_script`). Флаги: `BRAIN_ENABLED`, `BRAIN_MAX_RULES`. Админ: `GET /api/v1/admin/brain`.
+- **Пресеты поверх стека (без ломки старого):** платформа Shorts/Reels/TikTok, лёгкий/полный монтаж, жанры UGC/tutorial/hook_battle/review/unboxing, A/B хуки (1–3), метки моментов у AI-клипов, product URL → бриф для avatar. API: `GET /api/v1/client/presets`.
 
 ## Очередь
 

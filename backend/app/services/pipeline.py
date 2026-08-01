@@ -84,10 +84,30 @@ class VideoGenerationPipeline:
         
         try:
             await self._update_status(generation, GenerationStatus.SCRIPT_GENERATION, progress=10)
-            
+
+            generation.api_responses = generation.api_responses or {}
+            genre = str(generation.api_responses.get("genre") or "default")
+            product_brief = generation.api_responses.get("product_brief")
+            if not product_brief:
+                product_url = str(generation.api_responses.get("product_url") or "").strip()
+                if product_url:
+                    try:
+                        product_brief = await self.openai.brief_from_product_url(
+                            product_url,
+                            language=generation.target_language or "ru",
+                        )
+                        generation.api_responses["product_brief"] = product_brief
+                        await self.db.commit()
+                    except Exception as brief_err:
+                        generation.api_responses["product_brief_error"] = str(brief_err)[:240]
+                        await self.db.commit()
+                        product_brief = None
+
             generated_script = await self.openai.generate_viral_script(
                 generation.original_text,
-                generation.target_language
+                generation.target_language,
+                genre=genre,
+                product_brief=product_brief if isinstance(product_brief, dict) else None,
             )
             
             generation.generated_script = generated_script

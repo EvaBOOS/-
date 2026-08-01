@@ -71,7 +71,7 @@ Viral / AI-клипы принимают `source_url` (YouTube, Reels, TikTok и
 - UI: кабинет → **Радар**
 - API: `GET /api/v1/client/trends`, `POST /api/v1/client/trends/analyze`
 - YouTube Shorts: нужен `YOUTUBE_API_KEY` (Data API v3, бесплатная квота); только ролики ≤60 сек
-- TikTok: Creative Center (хрупко, часто HTML/капча/гео) — **MVP-2**: VPN/прокси или другой источник; пока вручную ссылка справа
+- TikTok: Creative Center (хрупко, часто HTML/капча/гео) — **MVP-2**: другой источник; пока вручную ссылка справа
 - Instagram / VK: coming soon
 - Разбор ролика: yt-dlp → Whisper → LLM-паттерны (`TRENDS_ANALYZE_COST_CREDITS`, по умолчанию 1)
 

@@ -21,6 +21,7 @@ from app.services.assets.library_service import AssetLibraryService
 from app.services.video.ffmpeg_service import FFmpegService
 from app.services.source_resolve import ensure_local_source
 from app.services.branding_watermark import resolve_export_watermark
+from app.services.video.content_presets import normalize_platform
 
 
 class AiClipsPipeline:
@@ -64,6 +65,8 @@ class AiClipsPipeline:
         max_clips = int(
             generation.api_responses.get("max_clips") or settings.AI_CLIPS_MAX_COUNT
         )
+        platform = normalize_platform(generation.api_responses.get("platform"))
+        generation.api_responses["platform"] = platform
         await self.db.commit()
 
         work_dir = os.path.join(
@@ -112,6 +115,7 @@ class AiClipsPipeline:
                     duration=duration,
                     language=generation.target_language or "ru",
                     max_clips=max_clips,
+                    platform=platform,
                 )
             except Exception as e:
                 plan = []
@@ -231,6 +235,7 @@ class AiClipsPipeline:
                     "title": clip.get("title"),
                     "reason": clip.get("reason"),
                     "score": clip.get("score"),
+                    "moment": clip.get("moment") or "other",
                     "start": clip.get("start"),
                     "end": clip.get("end"),
                     "path": out_path,

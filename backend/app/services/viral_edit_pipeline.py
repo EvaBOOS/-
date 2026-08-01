@@ -24,6 +24,13 @@ from app.services.assets.library_service import AssetLibraryService
 from app.services.assets.music_service import MusicLibraryService
 from app.services.video.ffmpeg_service import FFmpegService
 from app.services.video.edit_styles import ensure_min_zooms, get_style
+from app.services.video.content_presets import (
+    merge_style_layers,
+    normalize_genre,
+    normalize_intensity,
+    normalize_platform,
+    resolve_format,
+)
 from app.services.source_resolve import ensure_local_source
 from app.services.branding_watermark import resolve_export_watermark
 
@@ -72,8 +79,21 @@ class ViralEditPipeline:
         edit_format = str(generation.api_responses.get("edit_format") or "9:16")
         dub_language = str(generation.api_responses.get("dub_language") or "").strip().lower()
         speech_language = (generation.target_language or "ru").strip().lower()
-        style_cfg = get_style(edit_style)
+        platform = normalize_platform(generation.api_responses.get("platform"))
+        intensity = normalize_intensity(generation.api_responses.get("intensity"))
+        genre = normalize_genre(generation.api_responses.get("genre"))
+        hook_variants_n = max(1, min(int(generation.api_responses.get("hook_variants") or 1), 3))
+        edit_format = resolve_format(edit_format, platform)
+        style_cfg = merge_style_layers(
+            get_style(edit_style),
+            intensity=intensity,
+            genre=genre,
+        )
         width, height = self._format_size(edit_format)
+        generation.api_responses["platform"] = platform
+        generation.api_responses["intensity"] = intensity
+        generation.api_responses["genre"] = genre
+        generation.api_responses["edit_format"] = edit_format
         await self.db.commit()
 
         work_dir = os.path.join(
@@ -314,12 +334,18 @@ class ViralEditPipeline:
                     duration=duration,
                     language=plan_language,
                     style=edit_style,
+                    genre=genre,
+                    platform=platform,
+                    style_hint_override=style_cfg.get("hint"),
+                    hook_variants=hook_variants_n,
+                    lite=(intensity == "lite"),
                 )
             except Exception as plan_err:
                 plan = {
                     "effects": [],
                     "broll": [],
                     "hook": {"use": False, "text": ""},
+                    "hook_variants": [],
                     "mood": style_cfg.get("mood_default", "energetic"),
                     "style": edit_style,
                 }
@@ -361,12 +387,28 @@ class ViralEditPipeline:
                 else:
                     hook = {"use": True, "text": "Watch this before you scroll"}
             mood = plan.get("mood") or style_cfg.get("mood_default") or "energetic"
+            hook_variant_texts = []
+            if not no_speech:
+                raw_variants = plan.get("hook_variants") if isinstance(plan.get("hook_variants"), list) else []
+                for v in raw_variants:
+                    t = str(v or "").strip()[:90]
+                    if t and t not in hook_variant_texts:
+                        hook_variant_texts.append(t)
+                if hook and hook.get("use") and hook.get("text"):
+                    primary = str(hook["text"]).strip()[:90]
+                    if primary and primary not in hook_variant_texts:
+                        hook_variant_texts.insert(0, primary)
+                hook_variant_texts = hook_variant_texts[:hook_variants_n]
             generation.api_responses["edit_plan"] = {
                 "style": edit_style,
                 "mood": mood,
                 "format": edit_format,
+                "platform": platform,
+                "intensity": intensity,
+                "genre": genre,
                 "dub_language": dub_language or None,
                 "no_speech": no_speech,
+                "hook_variants": hook_variant_texts,
                 "effects": effects[:20],
                 "broll": plan.get("broll") or [],
                 "hook": hook,
@@ -503,6 +545,11 @@ class ViralEditPipeline:
             if hook and hook.get("use") and hook.get("text"):
                 hook_text = str(hook["text"]).strip()[:90]
                 generation.api_responses["hook_text"] = hook_text
+            elif hook_variant_texts:
+                hook_text = hook_variant_texts[0]
+                generation.api_responses["hook_text"] = hook_text
+            if hook_variant_texts:
+                generation.api_responses["hook_variants"] = hook_variant_texts
 
             ass_path = os.path.join(work_dir, "karaoke.ass")
             self.ffmpeg.write_karaoke_ass(
@@ -618,6 +665,70 @@ class ViralEditPipeline:
 
             final_path = os.path.join(work_dir, f"final_{generation_id}.mp4")
             shutil.copy2(marked_path, final_path)
+
+            # Optional A/B hook exports (same edit, alternate opening hooks)
+            hook_exports = []
+            alt_hooks = [
+                t for t in hook_variant_texts
+                if t and t != (hook_text or "")
+            ][: max(0, hook_variants_n - 1)]
+            if alt_hooks and not no_speech and words:
+                for i, alt in enumerate(alt_hooks, start=2):
+                    try:
+                        alt_ass = os.path.join(work_dir, f"karaoke_hook{i}.ass")
+                        self.ffmpeg.write_karaoke_ass(
+                            words=words,
+                            output_path=alt_ass,
+                            highlight_words=highlights,
+                            font_name=font_family,
+                            video_width=width,
+                            video_height=height,
+                            hook_text=alt,
+                            hook_duration=float(style_cfg.get("hook_duration") or 2.8),
+                            font_size=int(style_cfg.get("font_size") or 64),
+                            hot_font_size=int(style_cfg.get("hot_font_size") or 72),
+                            words_per_chunk=int(style_cfg.get("words_per_chunk") or 4),
+                            caption_pop=bool(style_cfg.get("caption_pop")),
+                            outline=int(style_cfg.get("outline") or 3),
+                        )
+                        alt_sub = os.path.join(work_dir, f"subtitled_hook{i}.mp4")
+                        self.ffmpeg.burn_ass_subtitles(
+                            broll_path, alt_ass, alt_sub, fonts_dir=fonts_dir
+                        )
+                        alt_music = os.path.join(work_dir, f"music_hook{i}.mp4")
+                        if music_path:
+                            self.ffmpeg.mix_background_music(
+                                alt_sub, music_path, alt_music, music_volume=music_vol
+                            )
+                        else:
+                            shutil.copy2(alt_sub, alt_music)
+                        alt_final = os.path.join(work_dir, f"final_{generation_id}_hook{i}.mp4")
+                        if wm and wm.get("path"):
+                            self.ffmpeg.apply_watermark(
+                                alt_music,
+                                alt_final,
+                                watermark_path=wm["path"],
+                                watermark_position=wm.get("position") or "bottom_right",
+                                watermark_opacity=int(wm.get("opacity") or 70),
+                                watermark_scale=int(wm.get("scale") or 13),
+                            )
+                        else:
+                            shutil.copy2(alt_music, alt_final)
+                        hook_exports.append({
+                            "index": i,
+                            "hook_text": alt,
+                            "path": os.path.basename(alt_final),
+                            "file_size_bytes": self.ffmpeg.get_file_size(alt_final),
+                        })
+                    except Exception as alt_err:
+                        generation.api_responses.setdefault("hook_export_errors", []).append(
+                            str(alt_err)[:200]
+                        )
+            if hook_exports:
+                generation.api_responses["hook_exports"] = hook_exports
+                generation.api_responses["hook_exports_abs"] = [
+                    os.path.join(work_dir, h["path"]) for h in hook_exports
+                ]
 
             generation.final_video_path = final_path
             generation.duration_seconds = int(self.ffmpeg.get_video_duration(final_path))

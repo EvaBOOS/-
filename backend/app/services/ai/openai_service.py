@@ -5,7 +5,7 @@ from app.core.config import settings
 class OpenAIService:
     """
     Script LLM via OpenAI-compatible chat completions.
-    Prefers AITUNNEL (₽, no VPN); falls back to OpenAI.
+    Prefers AITUNNEL (₽); falls back to OpenAI.
     """
     
     def __init__(self):
@@ -86,6 +86,8 @@ class OpenAIService:
         self, 
         original_text: str, 
         language: str = "ru",
+        genre: str = "default",
+        product_brief: dict | None = None,
     ) -> str:
         """Transform user's raw text into a viral short-form video script."""
         language_names = {
@@ -104,6 +106,10 @@ class OpenAIService:
         }
         
         target_language = language_names.get(language, "Russian")
+        from app.services.video.content_presets import get_genre, normalize_genre
+
+        genre = normalize_genre(genre)
+        genre_hint = get_genre(genre).get("hint") or ""
         
         system_prompt = f"""You are a friendly TV/online journalist rewriting copy for a talking-head short (TikTok/Reels/Shorts), 30–90 seconds.
 
@@ -115,16 +121,34 @@ HARD RULES (facts):
 3. If the topic is unfinished, unknown, future, or the user asks "who won" without stating the winner: say honestly that the result is not known from the brief / that we cannot confirm yet, and invite the viewer to share what they know. Frame speculation only as speculation.
 4. You may rephrase, compress, and add light emotional color (e.g. sympathy for Messi) ONLY around facts the user already gave.
 5. Keep a short hook, clear body, soft CTA (comment/question). 100–300 words.
-6. Language: {target_language}. No stage directions, timestamps, or labels — ONLY spoken script."""
-        brain_block = self._brain_block(["hooks", "storytelling"])
+6. Language: {target_language}. No stage directions, timestamps, or labels — ONLY spoken script.
+7. Genre guide: {genre_hint}"""
+        prefer = list(get_genre(genre).get("brain_tags") or [])
+        brain_block = self._brain_block(
+            ["hooks", "storytelling"],
+            prefer_tags=prefer or None,
+        )
         if brain_block:
             system_prompt = f"{system_prompt}\n\n{brain_block}"
+
+        brief_extra = ""
+        if product_brief and isinstance(product_brief, dict):
+            bullets = product_brief.get("bullets") or []
+            bullets_txt = "\n".join(f"- {b}" for b in bullets[:5])
+            brief_extra = (
+                f"\n\nProduct brief (use only these facts):\n"
+                f"Title: {product_brief.get('title') or ''}\n"
+                f"Summary: {product_brief.get('summary') or ''}\n"
+                f"Benefits:\n{bullets_txt}\n"
+                f"URL: {product_brief.get('url') or ''}"
+            )
 
         user_prompt = f"""Rewrite this as a friendly journalist short-form script.
 Preserve meaning; invent nothing factual beyond the brief.
 
 Brief:
 {original_text}
+{brief_extra}
 
 Output only the spoken script in {target_language}."""
 
@@ -139,6 +163,11 @@ Output only the spoken script in {target_language}."""
         duration: float,
         language: str = "ru",
         style: str = "dynamic",
+        genre: str = "default",
+        platform: str = "auto",
+        style_hint_override: str | None = None,
+        hook_variants: int = 1,
+        lite: bool = False,
     ) -> dict:
         """
         Rich edit plan for Stage 2 viral montage.
@@ -148,22 +177,42 @@ Output only the spoken script in {target_language}."""
             effects: [{effect, time, ...}],
             broll: [{time, duration, query}],
             hook: {text, use: bool} | null,
+            hook_variants: [str, ...],
             mood: calm|energetic|motivational|dramatic,
             style: str,
           }
         """
         import json
 
+        from app.services.video.content_presets import (
+            get_genre,
+            get_platform,
+            normalize_genre,
+            normalize_platform,
+        )
+        from app.services.video.edit_styles import get_style
+
         sample_words = words[:80] if words else []
         style = (style or "dynamic").lower()
-        from app.services.video.edit_styles import get_style
+        genre = normalize_genre(genre)
+        platform = normalize_platform(platform)
+        hook_n = max(1, min(int(hook_variants or 1), 3))
         preset = get_style(style)
-        style_hint = preset.get("hint") or "Balanced short-form edits."
+        style_hint = style_hint_override or preset.get("hint") or "Balanced short-form edits."
+        genre_hint = get_genre(genre).get("hint") or ""
+        plat = get_platform(platform)
+        platform_hint = plat.get("caption_safe_hint") or ""
+        lite_note = (
+            "Lite mode: prefer fewer zooms, empty broll [], strong opening hook only."
+            if lite
+            else ""
+        )
 
         system_prompt = (
             "You are a short-form video editor AI for TikTok/Reels/Shorts. "
             "Return ONLY a JSON object (no markdown) with keys: "
-            "effects (array), broll (array), hook (object|null), mood (string). "
+            "effects (array), broll (array), hook (object|null), "
+            "hook_variants (array of strings), mood (string). "
             "effects items: "
             '{"effect":"zoom","time":float,"duration":float,"scale":1.08-1.2} or '
             '{"effect":"highlight_word","word":"string","time":float}. '
@@ -172,24 +221,37 @@ Output only the spoken script in {target_language}."""
             "hook: if first 3 seconds are weak/generic (hello/today we talk), set "
             '{"use":true,"text":"short punchy hook grounded in the transcript"}; '
             "else {\"use\":false,\"text\":\"\"}. "
+            f"hook_variants: up to {hook_n} distinct short A/B hook lines (same meaning, different wording); "
+            "first should match hook.text when hook.use is true. "
             "Never invent clickbait unrelated to transcript (no random 'musical explosion' etc). "
-            "If transcript says SILENT / NO SPEECH: hook.use must be false and broll must be []. "
+            "If transcript says SILENT / NO SPEECH: hook.use must be false, hook_variants=[], and broll must be []. "
             "mood: one of calm, energetic, motivational, dramatic. "
-            f"Style guide: {style_hint}"
+            f"Style guide: {style_hint} "
+            f"Genre guide: {genre_hint} "
+            f"Platform guide: {platform_hint} "
+            f"{lite_note}"
+        )
+        prefer_tags = list(
+            dict.fromkeys(
+                ["shorts_viral", "retention", "pace"]
+                + list(plat.get("brain_tags") or [])
+                + list(get_genre(genre).get("brain_tags") or [])
+            )
         )
         brain_block = self._brain_block(
             ["hooks", "editing", "platforms"],
-            prefer_tags=["shorts_viral", "retention", "pace", "reels", "tiktok"],
+            prefer_tags=prefer_tags,
         )
         if brain_block:
             system_prompt = f"{system_prompt}\n\n{brain_block}"
         user_prompt = (
-            f"Language: {language}\nStyle: {style}\nDuration: {duration:.2f}s\n"
+            f"Language: {language}\nStyle: {style}\nGenre: {genre}\n"
+            f"Platform: {platform}\nDuration: {duration:.2f}s\n"
             f"Transcript:\n{transcript}\n\n"
             f"Word timings (sample):\n{json.dumps(sample_words, ensure_ascii=False)}"
         )
         content = await self._chat_completion(
-            system_prompt, user_prompt, temperature=0.35, max_tokens=1600
+            system_prompt, user_prompt, temperature=0.35, max_tokens=1800
         )
         content = content.strip()
         if content.startswith("```"):
@@ -202,6 +264,7 @@ Output only the spoken script in {target_language}."""
             "effects": [],
             "broll": [],
             "hook": None,
+            "hook_variants": [],
             "mood": "energetic" if style != "minimal" else "calm",
             "style": style,
         }
@@ -220,15 +283,30 @@ Output only the spoken script in {target_language}."""
 
         effects = data.get("effects") if isinstance(data.get("effects"), list) else []
         broll = data.get("broll") if isinstance(data.get("broll"), list) else []
+        if lite:
+            broll = []
         hook = data.get("hook") if isinstance(data.get("hook"), dict) else None
         mood = str(data.get("mood") or empty["mood"]).lower()
         if mood not in {"calm", "energetic", "motivational", "dramatic"}:
             mood = empty["mood"]
 
+        variants_raw = data.get("hook_variants") if isinstance(data.get("hook_variants"), list) else []
+        variants: list[str] = []
+        for v in variants_raw:
+            t = str(v or "").strip()[:90]
+            if t and t not in variants:
+                variants.append(t)
+        if hook and hook.get("use") and hook.get("text"):
+            primary = str(hook.get("text") or "").strip()[:90]
+            if primary and primary not in variants:
+                variants.insert(0, primary)
+        variants = variants[:hook_n]
+
         return {
             "effects": effects,
             "broll": broll[:3],
             "hook": hook,
+            "hook_variants": variants,
             "mood": mood,
             "style": style,
         }
@@ -272,36 +350,59 @@ Output only the spoken script in {target_language}."""
         duration: float,
         language: str = "ru",
         max_clips: int = 5,
+        platform: str = "auto",
     ) -> list:
         """
         Pick highlight windows for Shorts from a long transcript.
-        Returns: [{start, end, title, reason, score}]
+        Returns: [{start, end, title, reason, score, moment}]
         """
         import json
+
+        from app.services.video.content_presets import (
+            clip_duration_bounds,
+            get_platform,
+            normalize_moment_label,
+            normalize_platform,
+        )
+
+        platform = normalize_platform(platform)
+        plat = get_platform(platform)
+        clip_min, clip_max, clip_target = clip_duration_bounds(platform)
 
         sample = segments[:120] if segments else []
         system_prompt = (
             "You are a short-form clip editor. From a long video transcript, "
             "pick the most interesting standalone moments for TikTok/Reels/Shorts. "
             f"Return ONLY a JSON array with up to {max_clips} items: "
-            '{"start":float,"end":float,"title":"short title","reason":"why it works","score":0-100}. '
-            "Each clip must be 20-60 seconds. Prefer hooks, surprising claims, clear stories, CTAs. "
+            '{"start":float,"end":float,"title":"short title","reason":"why it works",'
+            '"score":0-100,"moment":"hook|punchline|story|cta|debate|tip|other"}. '
+            f"Each clip should be about {clip_target:.0f}s "
+            f"(hard range {clip_min:.0f}-{clip_max:.0f}s). "
+            "Prefer hooks, surprising claims, clear stories, CTAs. "
+            "Label each moment type accurately. "
+            f"Platform: {platform}. {plat.get('caption_safe_hint') or ''} "
             "Avoid silence/filler intros. No markdown."
+        )
+        prefer_tags = list(
+            dict.fromkeys(
+                ["long_to_short", "clips", "shorts_viral"]
+                + list(plat.get("brain_tags") or [])
+            )
         )
         brain_block = self._brain_block(
             ["hooks", "editing", "storytelling", "platforms"],
-            prefer_tags=["long_to_short", "clips", "shorts_viral", "tiktok", "reels"],
+            prefer_tags=prefer_tags,
         )
         if brain_block:
             system_prompt = f"{system_prompt}\n\n{brain_block}"
         user_prompt = (
-            f"Language: {language}\nTotal duration: {duration:.1f}s\n"
+            f"Language: {language}\nPlatform: {platform}\nTotal duration: {duration:.1f}s\n"
             f"Transcript:\n{transcript[:6000]}\n\n"
             f"Segments sample:\n{json.dumps(sample, ensure_ascii=False)[:5000]}"
         )
         try:
             content = await self._chat_completion(
-                system_prompt, user_prompt, temperature=0.35, max_tokens=1400
+                system_prompt, user_prompt, temperature=0.35, max_tokens=1600
             )
             content = content.strip()
             if content.startswith("```"):
@@ -315,7 +416,7 @@ Output only the spoken script in {target_language}."""
             elif not isinstance(data, list):
                 data = []
             clips = []
-            target_len = 25.0 if duration >= 30 else max(8.0, duration * 0.8)
+            target_len = clip_target if duration >= clip_min else max(8.0, duration * 0.8)
             for item in data:
                 if not isinstance(item, dict):
                     continue
@@ -323,10 +424,10 @@ Output only the spoken script in {target_language}."""
                 end = float(item.get("end") or 0)
                 if end <= start:
                     end = start + target_len
-                if end - start < min(15.0, target_len):
+                if end - start < min(clip_min, target_len):
                     end = start + target_len
-                if end - start > 70:
-                    end = start + 55
+                if end - start > clip_max + 10:
+                    end = start + clip_max
                 # Clamp into timeline instead of dropping (LLM often returns short/overhanging windows)
                 start = max(0.0, min(start, max(0.0, duration - 3.0)))
                 end = min(max(end, start + min(target_len, duration - start)), duration)
@@ -338,6 +439,7 @@ Output only the spoken script in {target_language}."""
                     "title": str(item.get("title") or "Клип")[:80],
                     "reason": str(item.get("reason") or "")[:160],
                     "score": int(max(0, min(100, float(item.get("score") or 70)))),
+                    "moment": normalize_moment_label(item.get("moment")),
                 })
             clips = sorted(clips, key=lambda c: c.get("score", 0), reverse=True)[:max_clips]
             if clips:
@@ -345,35 +447,134 @@ Output only the spoken script in {target_language}."""
         except Exception:
             pass
         # Heuristic fallback: evenly spaced windows if LLM fails / returns nothing usable
-        if duration < 25:
+        if duration < clip_min:
             return [{
                 "start": 0,
                 "end": round(duration, 2),
                 "title": "Полный фрагмент",
                 "reason": "короткое видео",
                 "score": 60,
+                "moment": "other",
             }]
         out = []
-        step = max(duration / max_clips, 35)
+        step = max(duration / max_clips, clip_target)
         t = 5.0
-        while t + 25 < duration and len(out) < max_clips:
+        while t + clip_min < duration and len(out) < max_clips:
             out.append({
                 "start": round(t, 2),
-                "end": round(min(t + 35, duration), 2),
+                "end": round(min(t + clip_target, duration), 2),
                 "title": f"Момент {len(out)+1}",
                 "reason": "автовыбор",
                 "score": 55,
+                "moment": "other",
             })
             t += step
         if not out and duration >= 8:
             out = [{
                 "start": 0,
-                "end": round(min(duration, 45), 2),
+                "end": round(min(duration, clip_max), 2),
                 "title": "Клип",
                 "reason": "автовыбор",
                 "score": 50,
+                "moment": "other",
             }]
         return out
+
+    async def brief_from_product_url(
+        self,
+        product_url: str,
+        language: str = "ru",
+    ) -> dict:
+        """
+        Fetch a product/landing page and build a short marketing brief for avatar scripts.
+        Returns: {title, summary, bullets, raw_excerpt, url}
+        """
+        import json
+        import re
+        from urllib.parse import urlparse
+
+        url = (product_url or "").strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Invalid product URL")
+
+        async with httpx.AsyncClient(
+            timeout=25.0,
+            follow_redirects=True,
+            headers={"User-Agent": "VideoGenBot/1.0 (+product-brief)"},
+        ) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            html = resp.text[:120_000]
+
+        def _meta(name: str) -> str:
+            patterns = [
+                rf'<meta[^>]+property=["\']{re.escape(name)}["\'][^>]+content=["\']([^"\']+)',
+                rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']{re.escape(name)}["\']',
+                rf'<meta[^>]+name=["\']{re.escape(name)}["\'][^>]+content=["\']([^"\']+)',
+                rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']{re.escape(name)}["\']',
+            ]
+            for pat in patterns:
+                m = re.search(pat, html, flags=re.I)
+                if m:
+                    return re.sub(r"\s+", " ", m.group(1)).strip()
+            return ""
+
+        title_m = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.I | re.S)
+        title = re.sub(r"\s+", " ", (title_m.group(1) if title_m else "")).strip()[:200]
+        desc = _meta("og:description") or _meta("description")
+        og_title = _meta("og:title")
+        if og_title:
+            title = og_title[:200] or title
+        textish = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.I)
+        textish = re.sub(r"<style[\s\S]*?</style>", " ", textish, flags=re.I)
+        textish = re.sub(r"<[^>]+>", " ", textish)
+        textish = re.sub(r"\s+", " ", textish).strip()[:3500]
+        excerpt = f"Title: {title}\nDescription: {desc}\nBody: {textish}"[:4000]
+
+        language_names = {
+            "ru": "Russian",
+            "en": "English",
+            "es": "Spanish",
+            "de": "German",
+            "fr": "French",
+        }
+        lang_name = language_names.get((language or "ru")[:2], "Russian")
+        system_prompt = (
+            "Extract a concise product marketing brief from page text. "
+            "Return ONLY JSON: "
+            '{"title":"string","summary":"2-4 sentences","bullets":["benefit1","benefit2","benefit3"]}. '
+            f"Write summary and bullets in {lang_name}. "
+            "Do not invent pricing, awards, or claims absent from the text."
+        )
+        brain_block = self._brain_block(["hooks", "storytelling"], prefer_tags=["ugc", "cta"])
+        if brain_block:
+            system_prompt = f"{system_prompt}\n\n{brain_block}"
+        content = await self._chat_completion(
+            system_prompt,
+            f"URL: {url}\n\n{excerpt}",
+            temperature=0.3,
+            max_tokens=700,
+        )
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        try:
+            data = json.loads(content)
+        except Exception:
+            data = {}
+        bullets = data.get("bullets") if isinstance(data.get("bullets"), list) else []
+        bullets = [str(b).strip()[:120] for b in bullets if str(b).strip()][:5]
+        return {
+            "url": url,
+            "title": str(data.get("title") or title or parsed.netloc)[:200],
+            "summary": str(data.get("summary") or desc or "")[:800],
+            "bullets": bullets,
+            "raw_excerpt": excerpt[:1500],
+        }
 
     async def score_virality(
         self,

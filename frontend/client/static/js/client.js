@@ -128,13 +128,16 @@ function showPage(pageName) {
 }
 
 // Generate Video
-async function generateVideo(text, language) {
+async function generateVideo(text, language, productUrl = '', genre = 'default') {
+    const body = {
+        original_text: text,
+        target_language: language,
+        genre: genre || 'default',
+    };
+    if (productUrl) body.product_url = productUrl;
     return await api('/client/generate', {
         method: 'POST',
-        body: JSON.stringify({
-            original_text: text,
-            target_language: language
-        })
+        body: JSON.stringify(body)
     });
 }
 
@@ -269,7 +272,20 @@ function getStatusText(status) {
     return texts[status] || status;
 }
 
-async function submitViralEdit(file, language, style = 'dynamic', format = '9:16', dubLanguage = '', fontId = '', sourceUrl = '', voiceoverText = '') {
+async function submitViralEdit(
+    file,
+    language,
+    style = 'dynamic',
+    format = '9:16',
+    dubLanguage = '',
+    fontId = '',
+    sourceUrl = '',
+    voiceoverText = '',
+    platform = 'auto',
+    intensity = 'full',
+    genre = 'default',
+    hookVariants = 1,
+) {
     const formData = new FormData();
     if (file) formData.append('file', file);
     if (sourceUrl) formData.append('source_url', sourceUrl);
@@ -278,6 +294,10 @@ async function submitViralEdit(file, language, style = 'dynamic', format = '9:16
     formData.append('format', format);
     formData.append('dub_language', dubLanguage || '');
     formData.append('font_id', fontId || '');
+    formData.append('platform', platform || 'auto');
+    formData.append('intensity', intensity || 'full');
+    formData.append('genre', genre || 'default');
+    formData.append('hook_variants', String(hookVariants || 1));
     if (voiceoverText) formData.append('voiceover_text', voiceoverText);
     const headers = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -416,13 +436,14 @@ async function previewLibraryFont(font) {
     }
 }
 
-async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUrl = '') {
+async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUrl = '', platform = 'auto') {
     const formData = new FormData();
     if (file) formData.append('file', file);
     if (sourceUrl) formData.append('source_url', sourceUrl);
     formData.append('language', language);
     formData.append('max_clips', String(maxClips));
     formData.append('font_id', fontId || '');
+    formData.append('platform', platform || 'auto');
 
     const headers = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -495,7 +516,8 @@ function renderGenerationModal(gen) {
         clipsSection.style.display = 'block';
         document.getElementById('modal-clips-list').innerHTML = clips.map((c) => {
             const title = escapeHtml(c.title || `Клип ${c.index}`);
-            const meta = `${c.duration || '?'}с · score ${c.score ?? '-'}`;
+            const moment = c.moment ? ` · ${escapeHtml(c.moment)}` : '';
+            const meta = `${c.duration || '?'}с · score ${c.score ?? '-'}${moment}`;
             return `<li><strong>${title}</strong><span>${escapeHtml(meta)} · <a href="#" data-clip-download="${c.index}">скачать</a></span></li>`;
         }).join('');
         document.querySelectorAll('[data-clip-download]').forEach((a) => {
@@ -521,6 +543,54 @@ function renderGenerationModal(gen) {
         });
     } else if (clipsSection) {
         clipsSection.style.display = 'none';
+    }
+
+    const hooksSection = document.getElementById('hooks-section');
+    const hookExports = gen.api_responses?.hook_exports;
+    const hookVariants = gen.api_responses?.hook_variants || gen.api_responses?.edit_plan?.hook_variants;
+    if (hooksSection) {
+        const lines = [];
+        if (Array.isArray(hookVariants) && hookVariants.length) {
+            hookVariants.forEach((t, i) => {
+                lines.push(`<li><strong>Хук ${i + 1}</strong><span>${escapeHtml(String(t))}</span></li>`);
+            });
+        }
+        if (Array.isArray(hookExports) && hookExports.length) {
+            hookExports.forEach((h) => {
+                const idx = h.index;
+                lines.push(
+                    `<li><strong>Экспорт A/B #${idx}</strong><span>${escapeHtml(h.hook_text || '')} · ` +
+                    `<a href="#" data-hook-download="${idx}">скачать</a></span></li>`
+                );
+            });
+        }
+        if (lines.length) {
+            hooksSection.style.display = 'block';
+            document.getElementById('modal-hooks-list').innerHTML = lines.join('');
+            document.querySelectorAll('[data-hook-download]').forEach((a) => {
+                a.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const idx = a.getAttribute('data-hook-download');
+                    try {
+                        const response = await fetch(`${API_BASE}/client/generations/${gen.id}/hooks/${idx}/download`, {
+                            headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+                        });
+                        if (!response.ok) throw new Error('Не удалось скачать вариант хука');
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `hook_${gen.id}_${idx}.mp4`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                    } catch (err) {
+                        alert(err.message);
+                    }
+                });
+            });
+        } else {
+            hooksSection.style.display = 'none';
+        }
     }
     
     const scriptSection = document.getElementById('script-section');
@@ -1092,6 +1162,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const text = document.getElementById('script-text').value;
         const language = document.getElementById('language').value;
+        const productUrl = (document.getElementById('product-url')?.value || '').trim();
+        const genre = document.getElementById('avatar-genre')?.value || 'default';
         
         if (currentClient.credits_remaining <= 0) {
             errorEl.textContent = 'Недостаточно кредитов. Обратитесь к администратору.';
@@ -1099,12 +1171,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         try {
-            const gen = await generateVideo(text, language);
+            const gen = await generateVideo(text, language, productUrl, genre);
             
             currentClient.credits_remaining--;
             updateCreditsDisplay();
             
             document.getElementById('script-text').value = '';
+            const productEl = document.getElementById('product-url');
+            if (productEl) productEl.value = '';
             charCount.textContent = '0';
             
             showPage('history');
@@ -1130,6 +1204,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const dubLanguage = document.getElementById('viral-dub')?.value || '';
         const fontId = document.getElementById('viral-font')?.value || '';
         const voiceoverText = (document.getElementById('viral-voiceover')?.value || '').trim();
+        const platform = document.getElementById('viral-platform')?.value || 'auto';
+        const intensity = document.getElementById('viral-intensity')?.value || 'full';
+        const genre = document.getElementById('viral-genre')?.value || 'default';
+        const hookVariants = parseInt(document.getElementById('viral-hooks')?.value || '1', 10);
 
         if (!file && !sourceUrl) {
             errorEl.textContent = 'Выберите видеофайл или вставьте ссылку';
@@ -1148,7 +1226,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (submitBtn) submitBtn.disabled = true;
 
         try {
-            const gen = await submitViralEdit(file || null, language, style, format, dubLanguage, fontId, sourceUrl, voiceoverText);
+            const gen = await submitViralEdit(
+                file || null,
+                language,
+                style,
+                format,
+                dubLanguage,
+                fontId,
+                sourceUrl,
+                voiceoverText,
+                platform,
+                intensity,
+                genre,
+                hookVariants,
+            );
             currentClient.credits_remaining--;
             updateCreditsDisplay();
             fileInput.value = '';
@@ -1182,6 +1273,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const language = document.getElementById('clips-language').value;
         const maxClips = parseInt(document.getElementById('clips-max')?.value || '5', 10);
         const fontId = document.getElementById('clips-font')?.value || '';
+        const platform = document.getElementById('clips-platform')?.value || 'auto';
 
         if (!file && !sourceUrl) {
             errorEl.textContent = 'Выберите видеофайл или вставьте ссылку';
@@ -1200,7 +1292,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (submitBtn) submitBtn.disabled = true;
 
         try {
-            const gen = await submitAiClips(file || null, language, maxClips, fontId, sourceUrl);
+            const gen = await submitAiClips(file || null, language, maxClips, fontId, sourceUrl, platform);
             currentClient.credits_remaining--;
             updateCreditsDisplay();
             fileInput.value = '';

@@ -163,9 +163,9 @@ async def create_generation(
     Submit a new video generation request.
     
     The text will be processed through the AI pipeline:
-    1. GPT-4o generates viral script
-    2. ElevenLabs synthesizes voice
-    3. HeyGen creates avatar video with lip sync
+    1. LLM generates viral script
+    2. TTS synthesizes voice
+    3. Avatar video with lip sync
     4. FFmpeg adds subtitles and watermark
     """
     # Check credits
@@ -176,12 +176,25 @@ async def create_generation(
         )
     
     # Create generation record
+    from app.services.video.content_presets import normalize_genre
+    from app.services.media_ingest import validate_public_http_url as _validate_url
+
+    genre_norm = normalize_genre(generation_data.genre)
+    product_url = (generation_data.product_url or "").strip()
+    api_meta = {"genre": genre_norm}
+    if product_url:
+        try:
+            api_meta["product_url"] = _validate_url(product_url)
+        except MediaIngestError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
     generation = VideoGeneration(
         client_id=client.id,
         mode=GenerationMode.AVATAR.value,
         original_text=generation_data.original_text,
         target_language=generation_data.target_language,
-        status=GenerationStatus.PENDING
+        status=GenerationStatus.PENDING,
+        api_responses=api_meta,
     )
     db.add(generation)
     await db.commit()
@@ -210,6 +223,10 @@ async def create_viral_edit(
     dub_language: str = Form(""),
     font_id: str = Form(""),
     voiceover_text: str = Form(""),
+    platform: str = Form("auto"),
+    intensity: str = Form("full"),
+    genre: str = Form("default"),
+    hook_variants: int = Form(1),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
@@ -217,6 +234,7 @@ async def create_viral_edit(
     Upload a talking-head / raw clip (or paste a public URL) and run the viral-edit pipeline:
     Whisper (optional) → optional voiceover/dub → format → zooms/B-roll/hook/music → karaoke → virality score.
     Silent clips (no speech) are supported; pass voiceover_text to add TTS later.
+    Optional: platform (shorts/reels/tiktok), intensity (full/lite), genre, hook_variants (1–3).
     """
     if client.credits_remaining <= 0:
         raise HTTPException(
@@ -225,6 +243,13 @@ async def create_viral_edit(
         )
 
     from app.services.video.edit_styles import VALID_STYLES
+    from app.services.video.content_presets import (
+        normalize_genre,
+        normalize_intensity,
+        normalize_platform,
+        resolve_format,
+    )
+
     style_norm = (style or "dynamic").strip().lower()
     if style_norm not in VALID_STYLES:
         style_norm = "dynamic"
@@ -232,6 +257,12 @@ async def create_viral_edit(
     format_norm = (format or "9:16").strip()
     if format_norm not in {"9:16", "1:1", "16:9"}:
         format_norm = "9:16"
+
+    platform_norm = normalize_platform(platform)
+    intensity_norm = normalize_intensity(intensity)
+    genre_norm = normalize_genre(genre)
+    format_norm = resolve_format(format_norm, platform_norm)
+    hooks_n = max(1, min(int(hook_variants or 1), 3))
 
     dub_norm = (dub_language or "").strip().lower()
     if dub_norm in {"", "same", "none", "original"}:
@@ -262,6 +293,10 @@ async def create_viral_edit(
             "font_id": font_norm or None,
             "source_url": validated_url,
             "voiceover_text": vo_norm or None,
+            "platform": platform_norm,
+            "intensity": intensity_norm,
+            "genre": genre_norm,
+            "hook_variants": hooks_n,
         },
     )
     db.add(generation)
@@ -286,11 +321,13 @@ async def create_ai_clips(
     language: str = Form("ru"),
     max_clips: int = Form(5),
     font_id: str = Form(""),
+    platform: str = Form("auto"),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Upload a long video (or paste a public URL); AI finds highlight moments and exports Shorts clips.
+    Optional platform preset: shorts / reels / tiktok (duration targets + brain tags).
     """
     if client.credits_remaining <= 0:
         raise HTTPException(
@@ -298,8 +335,11 @@ async def create_ai_clips(
             detail="No credits remaining. Please contact admin to add more credits.",
         )
 
+    from app.services.video.content_presets import normalize_platform
+
     clips_n = max(1, min(int(max_clips or 5), settings.AI_CLIPS_MAX_COUNT))
     font_norm = _normalize_font_id(font_id)
+    platform_norm = normalize_platform(platform)
 
     saved_path, display_name, validated_url = await _save_upload_or_url(
         file=file,
@@ -320,6 +360,7 @@ async def create_ai_clips(
             "max_clips": clips_n,
             "font_id": font_norm or None,
             "source_url": validated_url,
+            "platform": platform_norm,
         },
     )
     db.add(generation)
@@ -501,6 +542,63 @@ async def download_clip(
         media_type="video/mp4",
         filename=f"clip_{generation_id}_{clip_index}.mp4",
     )
+
+
+@router.get("/generations/{generation_id}/hooks/{hook_index}/download")
+async def download_hook_variant(
+    generation_id: int,
+    hook_index: int,
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download an A/B hook export from a viral-edit job (2-based index matching hook_exports)."""
+    result = await db.execute(
+        select(VideoGeneration)
+        .where(
+            VideoGeneration.id == generation_id,
+            VideoGeneration.client_id == client.id,
+        )
+    )
+    generation = result.scalar_one_or_none()
+    if not generation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Generation not found")
+    if generation.status != GenerationStatus.COMPLETED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hooks are not ready")
+
+    paths = (generation.api_responses or {}).get("hook_exports_abs") or []
+    exports = (generation.api_responses or {}).get("hook_exports") or []
+    # Allow lookup by export.index or by 1-based position in list
+    path = None
+    for i, item in enumerate(exports):
+        if int(item.get("index") or (i + 2)) == hook_index:
+            if i < len(paths):
+                path = paths[i]
+            break
+    if not path and 1 <= hook_index <= len(paths):
+        path = paths[hook_index - 1]
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hook variant not found")
+
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=f"hook_{generation_id}_{hook_index}.mp4",
+    )
+
+
+@router.get("/presets")
+async def list_content_presets(
+    client: Client = Depends(get_current_client),
+):
+    """Platform / intensity / genre presets for client UI."""
+    from app.services.video.content_presets import list_presets_public
+    from app.services.video.edit_styles import STYLE_PRESETS
+
+    data = list_presets_public()
+    data["styles"] = [
+        {"id": k, "label": v.get("label") or k} for k, v in STYLE_PRESETS.items()
+    ]
+    return data
 
 
 @router.delete("/generations/{generation_id}")

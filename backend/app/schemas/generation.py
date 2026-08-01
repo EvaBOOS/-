@@ -7,6 +7,8 @@ from app.models.generation import GenerationStatus
 class GenerationCreate(BaseModel):
     original_text: str = Field(..., min_length=10, max_length=5000)
     target_language: str = Field("ru", min_length=2, max_length=10)
+    product_url: Optional[str] = Field(None, max_length=2000)
+    genre: Optional[str] = Field("default", max_length=40)
 
 
 class GenerationStatusUpdate(BaseModel):

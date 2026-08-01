@@ -64,7 +64,7 @@ app = FastAPI(
     ### Features:
     - **Admin Panel**: Manage clients, subscriptions, and branding
     - **Client Dashboard**: Submit scripts and download generated videos
-    - **AI Pipeline**: GPT-4o → ElevenLabs → HeyGen → FFmpeg
+    - **AI Pipeline**: сценарий → озвучка → аватар → FFmpeg
     
     ### Authentication:
     All endpoints (except login) require Bearer token authentication.
@@ -248,9 +248,9 @@ async def root():
                     <a class="btn btn-lime" href="/admin">Админка</a>
                 </div>
                 <div class="meta">
-                    <span class="chip">AITUNNEL</span>
-                    <span class="chip">Edge TTS</span>
-                    <span class="chip">HeyGen</span>
+                    <span class="chip">Сценарий</span>
+                    <span class="chip">Озвучка</span>
+                    <span class="chip">Аватар</span>
                     <span class="chip">v1.0.0</span>
                 </div>
             </section>
