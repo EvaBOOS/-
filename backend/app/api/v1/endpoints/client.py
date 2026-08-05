@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from typing import Optional
+import logging
 import os
 import math
 import uuid
@@ -23,6 +24,7 @@ from app.services.jobs import enqueue_job
 from app.services.media_ingest import MediaIngestError, validate_public_http_url
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _save_upload_or_url(
@@ -684,7 +686,10 @@ async def get_library_font_file(
     try:
         family, _fonts_dir, path = await lib.ensure_font_file(font_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Font unavailable: {e}") from e
+        logger.exception("Font file unavailable: font_id=%s", font_id)
+        is_production = (settings.ENVIRONMENT or "").strip().lower() in {"production", "prod"}
+        detail = "Font unavailable" if is_production else f"Font unavailable: {e}"
+        raise HTTPException(status_code=500, detail=detail) from e
     if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Font file missing")
 

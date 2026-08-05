@@ -184,7 +184,7 @@ function renderGenerations(data) {
                     ${statusIcon}
                 </div>
                 <div class="generation-info">
-                    <h4>${gen.mode === 'viral_edit' ? '✨ ' : gen.mode === 'ai_clips' ? '✂️ ' : ''}${truncateText(gen.original_text, 50)}</h4>
+                    <h4>${gen.mode === 'viral_edit' ? '✨ ' : gen.mode === 'ai_clips' ? '✂️ ' : ''}${escapeHtml(truncateText(gen.original_text, 50))}</h4>
                     <div class="generation-meta">
                         <span class="status-badge status-${gen.status}">${statusText}</span>
                         <span>${formatDate(gen.created_at)}</span>
@@ -816,8 +816,8 @@ async function loadRadarTrends(forceRefresh = false) {
         }
         list.innerHTML = items.map((it) => {
             const views = it.metrics?.views != null ? ` · ${Number(it.metrics.views).toLocaleString('ru-RU')} просмотров` : '';
-            const rank = it.metrics?.rank != null ? ` · #${it.metrics.rank}` : '';
-            const dur = it.metrics?.duration_sec != null ? ` · ${it.metrics.duration_sec}с` : '';
+            const rank = it.metrics?.rank != null ? ` · #${escapeHtml(String(it.metrics.rank))}` : '';
+            const dur = it.metrics?.duration_sec != null ? ` · ${escapeHtml(String(it.metrics.duration_sec))}с` : '';
             return `
             <article class="radar-row" data-id="${it.id}" data-url="${escapeHtml(it.url || '')}">
                 <div>
@@ -976,7 +976,8 @@ function escapeHtml(str) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function formatDate(dateString) {

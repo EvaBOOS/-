@@ -51,6 +51,7 @@ services:
       - USE_CELERY=${USE_CELERY:-true}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production-32chars}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       - AITUNNEL_API_KEY=${AITUNNEL_API_KEY}
       - AITUNNEL_BASE_URL=${AITUNNEL_BASE_URL:-https://api.aitunnel.ru/v1/}
       - AITUNNEL_MODEL=${AITUNNEL_MODEL:-gemini-2.5-flash}

@@ -285,10 +285,14 @@ async def upload_watermark(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid file type. Allowed: PNG, JPEG, WebP"
         )
-    
-    # Save file
-    ext = file.filename.split(".")[-1] if file.filename else "png"
-    filename = f"{uuid.uuid4()}.{ext}"
+
+    # Save file — extension comes from a fixed allowlist, never straight from the
+    # client-supplied filename (an unsanitized extension like "png/../../x" would
+    # let os.makedirs() traverse out of the uploads directory when building the path).
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+        ext = ".png"
+    filename = f"{uuid.uuid4()}{ext}"
     filepath = os.path.join(settings.UPLOAD_DIR, "watermarks", filename)
     
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -324,17 +328,20 @@ async def upload_font(
         )
     
     # Validate file type
-    allowed_types = ["font/ttf", "font/otf", "application/x-font-ttf", 
+    allowed_types = ["font/ttf", "font/otf", "application/x-font-ttf",
                      "application/x-font-otf", "application/octet-stream"]
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid file type. Allowed: TTF, OTF"
         )
-    
-    # Save file
-    ext = file.filename.split(".")[-1] if file.filename else "ttf"
-    filename = f"{uuid.uuid4()}.{ext}"
+
+    # Save file — extension from a fixed allowlist (see watermark upload above
+    # for why the raw client-supplied filename must never reach os.path.join).
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in {".ttf", ".otf"}:
+        ext = ".ttf"
+    filename = f"{uuid.uuid4()}{ext}"
     filepath = os.path.join(settings.UPLOAD_DIR, "fonts", filename)
     
     os.makedirs(os.path.dirname(filepath), exist_ok=True)

@@ -94,20 +94,24 @@ Silent-клипы (нет озвучки) — валидный сценарий:
 - В CI — GitHub Secrets / TruffleHog (см. `.github/workflows/secret-scan.yml`).
 - После утечки в чат/лог — ротация AITUNNEL / HeyGen / Pexels / YouTube API key / `SECRET_KEY`.
 - Google Cloud: ограничить API key только **YouTube Data API v3** (+ IP при возможности).
-- Прод: длинный уникальный `SECRET_KEY`, сильный `POSTGRES_PASSWORD`, смена дефолтного admin-пароля.
+- Прод: длинный уникальный `SECRET_KEY` (`python -c "import secrets; print(secrets.token_hex(32))"`), сильный `POSTGRES_PASSWORD`, смена дефолтного admin-пароля.
+- **Смена пароля админа/клиента**: `POST /api/v1/auth/change-password` (`current_password` + `new_password`, требует Bearer-токен). `FIRST_ADMIN_PASSWORD`/`ADMIN_PASSWORD` в `.env` заполняет пароль **только при первом создании** строки в БД (`create_default_admin()`); если админ уже существует — смена `.env` ничего не даст, нужно залогиниться и вызвать этот эндпоинт (или поправить `hashed_password` в БД напрямую).
+- **CORS**: по умолчанию `CORS_ORIGINS` пуст → браузер не даст ни одному стороннему сайту делать credentialed-запросы к API (панели `/admin` и `/dashboard` — same-origin, им это не нужно). Заполняйте `CORS_ORIGINS` только если API дергает отдельный фронтенд-домен. Никогда не выставляйте `allow_origins=["*"]` вместе с `allow_credentials=True` вручную в коде — Starlette в этом случае зеркалит **любой** `Origin` запроса вместо `*`, т.е. фактически снимает ограничение.
+- **`/media/`**: nginx отдаёт публично (без авторизации) только `uploads/watermarks/` — это единственная часть `MEDIA_ROOT`, которая должна быть публичной (превью логотипа в UI). Если понадобится отдавать что-то ещё из `media/` — заводите отдельный `location`, никогда не открывайте весь `alias /app/media/` целиком: там лежат сгенерированные и загруженные видео **всех** клиентов без каких-либо ограничений доступа на уровне nginx.
 
 ## Чеклист Linux-hardening (VPS)
 
 1. **SSH**: ключи, отключить пароль root, `PermitRootLogin no`, нестандартный порт по желанию.
 2. **Firewall**: ufw/firewalld — только 22/80/443 (и 8000 только с localhost, если за nginx).
 3. **Обновления**: `unattended-upgrades` или регулярный `apt upgrade`.
-4. **Docker**: не публиковать Postgres/Redis наружу в проде (убрать `ports:` у `db`/`redis` или bind `127.0.0.1`).
+4. **Docker**: не публиковать Postgres/Redis наружу в проде (убрать `ports:` у `db`/`redis` или bind `127.0.0.1`) — в `docker-compose.yml` уже забинжено на `127.0.0.1`, проверить, что на сервере это не переопределено.
 5. **TLS**: nginx + Let's Encrypt; HSTS после проверки HTTPS.
 6. **Пользователь**: контейнеры уже под `appuser`; хост — отдельный deploy-user без лишних sudo.
 7. **Бэкапы**: volume `postgres_data` + `media_data` по расписанию.
 8. **Логи**: ротация; не логировать тела запросов с API-ключами.
-9. **Fail2ban** / rate limit на `/api/v1/auth/login` (nginx `limit_req`).
+9. ~~Fail2ban / rate limit на `/api/v1/auth/login`~~ — сделано: `nginx.conf` ограничивает и `/api/v1/auth/login`, и `/api/v1/auth/change-password` (тоже проверяет реальный пароль — такой же брутфорс-oracle) отдельной зоной `limit_req zone=login` (1 req/s, burst 3) поверх общей `zone=api`. Fail2ban на SSH — по желанию, отдельно от этого репо.
 10. **Мониторинг диска**: FFmpeg/media быстро раздувают volume.
+11. **На каждом сервере — свой `.env`**: значения в `docker/.env`/`backend/.env` этого чек-аута репозитория (SECRET_KEY, ADMIN_PASSWORD, POSTGRES_PASSWORD) — это ваши **локальные** файлы, они никуда не деплоятся автоматически. Если на сервере стоит копия со старыми дефолтами (`changeme123` / `dev-local-secret-key-change-in-prod-32c`) — обновите `.env` там отдельно и перезапустите `docker compose up -d`.
 
 ## Масштаб
 

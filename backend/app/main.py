@@ -75,10 +75,24 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+_cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+if "*" in _cors_origins:
+    # A comment warning against CORS_ORIGINS=* isn't enforcement — an operator
+    # can still set it. Strip it in code too: allow_credentials=True + "*" is
+    # exactly the combination Starlette turns into "reflect any Origin",
+    # i.e. the original vulnerability this setting exists to prevent.
+    import logging
+    logging.getLogger(__name__).warning(
+        "CORS_ORIGINS contains \"*\" — ignoring it. Wildcard origins cannot be "
+        "combined with credentialed requests; list explicit origins instead."
+    )
+    _cors_origins = [o for o in _cors_origins if o != "*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    # Only allow credentialed (Authorization-header) cross-origin requests for
+    # explicitly configured origins — never combine allow_credentials with "*".
+    allow_credentials=bool(_cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -293,10 +307,11 @@ async def health_check():
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler."""
+    is_production = (settings.ENVIRONMENT or "").strip().lower() in {"production", "prod"}
     return JSONResponse(
         status_code=500,
         content={
             "detail": "Internal server error",
-            "message": str(exc) if settings.SECRET_KEY == "your-secret-key-change-in-production-min-32-chars" else "An error occurred"
+            "message": "An error occurred" if is_production else str(exc)
         }
     )

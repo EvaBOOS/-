@@ -4,10 +4,10 @@ from sqlalchemy import select
 from datetime import timedelta
 
 from app.api.deps import get_db, get_current_user
-from app.core.security import verify_password, create_access_token
+from app.core.security import verify_password, create_access_token, get_password_hash
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.user import UserLogin, Token, UserResponse
+from app.schemas.user import UserLogin, Token, UserResponse, ChangePasswordRequest
 
 router = APIRouter()
 
@@ -52,3 +52,22 @@ async def get_current_user_info(
 ):
     """Get current user information."""
     return current_user
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Change the current user's own password (admin or client)."""
+    if not verify_password(body.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect"
+        )
+
+    current_user.hashed_password = get_password_hash(body.new_password)
+    await db.commit()
+
+    return {"message": "Password updated"}

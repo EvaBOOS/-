@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-in-production-min-32-chars"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    # Comma-separated origins allowed to make credentialed cross-origin API calls
+    # (e.g. "https://app.example.com,https://admin.example.com"). Empty by default:
+    # the bundled admin/client panels are served by this same app and only ever
+    # call relative /api/... URLs, so no cross-origin access is needed out of the box.
+    # NEVER set this to "*" together with credentials — browsers require an explicit
+    # origin for credentialed requests, so FastAPI/Starlette would reflect back
+    # whatever Origin the caller sends, i.e. effectively allow any website.
+    CORS_ORIGINS: str = ""
     
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/videogen"
@@ -122,4 +130,26 @@ def _validate_secret_key() -> None:
         )
 
 
+_INSECURE_ADMIN_PASSWORDS = {"changeme123", "admin", "password", "12345678"}
+
+
+def _validate_admin_password() -> None:
+    pwd = (settings.FIRST_ADMIN_PASSWORD or "").strip()
+    env = (settings.ENVIRONMENT or "development").strip().lower()
+    weak = (not pwd) or (pwd.lower() in _INSECURE_ADMIN_PASSWORDS) or (len(pwd) < 8)
+    if env in {"production", "prod"} and weak:
+        raise RuntimeError(
+            "Insecure FIRST_ADMIN_PASSWORD in production. Set ENVIRONMENT=production only "
+            "with a unique admin password (min 8 chars, not a known default). Note this only "
+            "affects the admin row created on first boot — rotate an existing admin's password "
+            "via POST /api/v1/auth/change-password."
+        )
+    if weak:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Using a weak/default FIRST_ADMIN_PASSWORD — fine for local dev, unsafe for any public deploy."
+        )
+
+
 _validate_secret_key()
+_validate_admin_password()
