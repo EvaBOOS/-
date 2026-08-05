@@ -1,6 +1,6 @@
 {
   "domain": "storytelling",
-  "version": 40,
+  "version": 42,
   "rules": [
     {
       "id": "s01",
@@ -626,6 +626,26 @@
         "viral",
         "shorts",
         "clipcreator"
+      ]
+    },
+    {
+      "id": "s67",
+      "text": "Под Reels (потолок ~90с) бери одну линию: чище темп, меньше ответвлений; второй твист — только если влезает без провисания.",
+      "tags": [
+        "reels",
+        "structure",
+        "pace",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "s68",
+      "text": "TikTok терпит более длинный multi-beat нарратив, если кривая удержания держится — не дроби идею зря.",
+      "tags": [
+        "tiktok",
+        "structure",
+        "retention",
+        "reels_vs_tiktok_2026"
       ]
     }
   ]

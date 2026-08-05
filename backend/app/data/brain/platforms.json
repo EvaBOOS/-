@@ -1,6 +1,6 @@
 {
   "domain": "platforms",
-  "version": 39,
+  "version": 52,
   "rules": [
     {
       "id": "p01",
@@ -520,6 +520,142 @@
         "editing",
         "shorts",
         "clipcreator"
+      ]
+    },
+    {
+      "id": "p49",
+      "text": "TikTok — машина холодного охвата (For You, контент важнее подписчиков); Reels — машина отношений с discovery поверх тёплой аудитории.",
+      "tags": [
+        "tiktok",
+        "reels",
+        "algorithm",
+        "strategy",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p50",
+      "text": "Выбирай площадку по задаче: discovery / конверсия / наращивание своей аудитории / монетизация — не по «кто круче в среднем».",
+      "tags": [
+        "reels",
+        "tiktok",
+        "strategy",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p51",
+      "text": "Нет аудитории — приоритет TikTok: система быстрее тестирует ролик на незнакомцах.",
+      "tags": [
+        "tiktok",
+        "cold_start",
+        "strategy",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p52",
+      "text": "Уже есть база в Instagram — приоритет Reels: тёплая сеть даёт сильнее первый пуш, чем старт с нуля в TikTok.",
+      "tags": [
+        "reels",
+        "instagram",
+        "strategy",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p53",
+      "text": "Бизнес/агентство на лиды и продажи: Reels как основной канал, TikTok — feeder холодного discovery.",
+      "tags": [
+        "reels",
+        "tiktok",
+        "conversion",
+        "strategy",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p54",
+      "text": "Reels в 2026 часто до ~90с: сжимай сюжет, меньше отступлений; длинные multi-beat истории легче живут в TikTok.",
+      "tags": [
+        "reels",
+        "tiktok",
+        "length",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p55",
+      "text": "Оба формата 9:16 / 1080×1920 — один вертикальный master-файл можно кросс-постить, но не копируй caption/CTA/звук один в один.",
+      "tags": [
+        "reels",
+        "tiktok",
+        "repurpose",
+        "specs",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p56",
+      "text": "Водяной знак TikTok на Reels убивает охват: выгружай чистый экспорт без чужих watermark.",
+      "tags": [
+        "reels",
+        "tiktok",
+        "repurpose",
+        "watermark",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p57",
+      "text": "Кросс-пост: перепиши caption, смени звук на нативный, подвинь оверлеи, поменяй CTA и публикуй в разное время — не одновременно на обе сети.",
+      "tags": [
+        "reels",
+        "tiktok",
+        "repurpose",
+        "cta",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p58",
+      "text": "CTA «подпишись на часть 2» ок для TikTok; на Instagram чаще лучше конверсионный CTA (профиль, товар, запись, DM).",
+      "tags": [
+        "reels",
+        "tiktok",
+        "cta",
+        "conversion",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p59",
+      "text": "TikTok-алгоритм сильно смотрит первые секунды и кривую удержания: слабый хук — меньше тестов на FYP.",
+      "tags": [
+        "tiktok",
+        "algorithm",
+        "retention",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p60",
+      "text": "Reels опирается на соцконтекст: подписчики, прошлый engagement и история аккаунта весят больше, чем в TikTok.",
+      "tags": [
+        "reels",
+        "instagram",
+        "algorithm",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "p61",
+      "text": "Для продажи конкретного продукта/услуги Reels часто удобнее: бренд-контекст и путь к действию мягче, чем чистый entertainment TikTok.",
+      "tags": [
+        "reels",
+        "conversion",
+        "strategy",
+        "reels_vs_tiktok_2026"
       ]
     }
   ]

@@ -1,6 +1,6 @@
 {
   "domain": "hooks",
-  "version": 11,
+  "version": 13,
   "rules": [
     {
       "id": "h01",
@@ -309,6 +309,26 @@
         "editing",
         "aspect ratio",
         "clipcreator"
+      ]
+    },
+    {
+      "id": "h38",
+      "text": "На TikTok хук решает сильнее темы: сильная идея со слабым открытием всё равно теряет тест на FYP.",
+      "tags": [
+        "tiktok",
+        "open",
+        "retention",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "h39",
+      "text": "Первые ~3 кадра TikTok: визуальный сдвиг + текстовый setup + моментальный интерес — глаз должен двигаться сразу.",
+      "tags": [
+        "tiktok",
+        "open",
+        "visual",
+        "reels_vs_tiktok_2026"
       ]
     }
   ]

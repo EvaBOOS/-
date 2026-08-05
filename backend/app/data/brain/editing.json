@@ -1,6 +1,6 @@
 {
   "domain": "editing",
-  "version": 59,
+  "version": 61,
   "rules": [
     {
       "id": "e01",
@@ -1032,6 +1032,28 @@
         "editing",
         "prevention",
         "clipcreator"
+      ]
+    },
+    {
+      "id": "e107",
+      "text": "Faceless Reels: чистая структура, читаемые субтитры без звука; шаблон ~60с — предпосылка → эскалация → payoff.",
+      "tags": [
+        "reels",
+        "faceless",
+        "structure",
+        "subtitles",
+        "reels_vs_tiktok_2026"
+      ]
+    },
+    {
+      "id": "e108",
+      "text": "Faceless TikTok: важнее движение и смена текстуры в первых кадрах, чем идеальный «глянец»; трендовый звук даёт доп. lift.",
+      "tags": [
+        "tiktok",
+        "faceless",
+        "hook",
+        "audio",
+        "reels_vs_tiktok_2026"
       ]
     }
   ]
