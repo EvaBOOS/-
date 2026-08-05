@@ -67,7 +67,7 @@ def main():
         outline=int(cfg["outline"]),
     )
     ass_text = open(ass, encoding="utf-8").read()
-    assert "\\fscx118" in ass_text or "fscx118" in ass_text
+    assert "\\fscx112" in ass_text or "fscx112" in ass_text
     assert f",{cfg['font_size']}," in ass_text or f",{cfg['font_size']}," in ass_text.replace(" ", "")
 
     zooms = [

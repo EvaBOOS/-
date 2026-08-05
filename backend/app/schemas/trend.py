@@ -46,6 +46,7 @@ class TrendInsightOut(BaseModel):
     pace_wpm: Optional[float] = None
     style_guess: Optional[str] = None
     tips: Optional[List[str]] = None
+    hashtags: Optional[List[str]] = None
     raw_llm: Optional[Dict[str, Any]] = None
     linked_generation_id: Optional[int] = None
     created_at: Optional[datetime] = None

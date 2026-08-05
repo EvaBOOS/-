@@ -1,10 +1,13 @@
+import logging
 import os
 import uuid
 import subprocess
 import json
 import shutil
-from typing import Optional, List, Dict
+from typing import Callable, Optional, List, Dict
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_binary(name: str) -> str:
@@ -489,7 +492,7 @@ class FFmpegService:
                 "-i", audio_path,
                 "-filter_complex", fc,
                 "-map", "[v]", "-map", "[a]",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-c:v", "libx264", "-preset", "medium", "-crf", "23",
                 "-c:a", "aac", "-b:a", "128k",
                 "-shortest",
                 "-movflags", "+faststart",
@@ -523,6 +526,7 @@ class FFmpegService:
         watermark_position: str = "bottom_right",
         watermark_opacity: int = 80,
         watermark_scale: int = 15,
+        on_fallback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """Overlay a PNG/JPEG watermark onto video."""
         if not watermark_path or not os.path.isfile(watermark_path):
@@ -551,13 +555,17 @@ class FFmpegService:
             "-i", watermark_path,
             "-filter_complex", fc,
             "-map", "[vout]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "copy",
             "-movflags", "+faststart",
             output_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning("apply_watermark ffmpeg failed, shipping without watermark: %s", err)
+            if on_fallback:
+                on_fallback(f"watermark not applied (ffmpeg error): {err[:150]}")
             shutil.copy2(video_path, output_path)
         return output_path
     
@@ -622,7 +630,7 @@ class FFmpegService:
             "-ss", str(max(0.0, float(start))),
             "-i", video_path,
             "-t", str(dur),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             output_path,
@@ -681,11 +689,20 @@ class FFmpegService:
         pad: float = 0.2,
         max_cut_ratio: float = 0.35,
         min_silence_len: float = 0.55,
+        skip_if_kept_ratio_above: float = 0.97,
+        on_fallback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """
-        Cut long silences by keeping speech ranges complementary to silence_intervals.
-        Soft by default: pads speech edges, ignores short pauses, refuses to cut
-        more than max_cut_ratio of the timeline.
+        Cut arbitrary intervals (silence, or anything else — e.g. filler-word
+        spans) by keeping the complementary ranges. Soft by default: pads
+        speech edges, ignores very short intervals, refuses to cut more than
+        max_cut_ratio of the timeline, and skips re-encoding entirely when
+        barely anything would be cut.
+
+        skip_if_kept_ratio_above governs that last bar: 0.97 (cutting <3% of
+        the video isn't worth a full re-encode) makes sense for silence, but
+        is too conservative for filler words, which are individually brief —
+        callers cutting those should pass something much closer to 1.0.
         """
         duration = self.get_video_duration(video_path)
         if duration <= 0:
@@ -711,10 +728,10 @@ class FFmpegService:
 
         kept_dur = sum(k["end"] - k["start"] for k in keep)
         cut_ratio = 1.0 - (kept_dur / duration) if duration else 0.0
-        # Skip if nothing useful, almost no silence, too shredded, or too aggressive
+        # Skip if nothing useful, almost nothing to cut, too shredded, or too aggressive
         if (
             not keep
-            or kept_dur >= duration * 0.97
+            or kept_dur >= duration * skip_if_kept_ratio_above
             or len(keep) > 40
             or cut_ratio > max_cut_ratio
         ):
@@ -738,13 +755,17 @@ class FFmpegService:
             self.ffmpeg_bin, "-y", "-i", video_path,
             "-filter_complex", filter_complex,
             "-map", "[outv]", "-map", "[outa]",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             output_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning("keep_speech_segments ffmpeg failed, keeping unedited source: %s", err)
+            if on_fallback:
+                on_fallback(f"silence trim skipped (ffmpeg error): {err[:150]}")
             # Soft-fail: keep original
             shutil.copy2(video_path, output_path)
             return output_path
@@ -776,7 +797,7 @@ class FFmpegService:
         cmd = [
             self.ffmpeg_bin, "-y", "-i", video_path,
             "-vf", vf,
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             output_path,
@@ -793,17 +814,39 @@ class FFmpegService:
         zooms: List[Dict],
         max_zooms: int = 5,
         max_scale: float = 1.25,
+        ramp: float = 0.18,
+        on_fallback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """
         Overlay brief zoomed crops for retention punches.
         zooms: [{time, duration, scale}]
+
+        Each zoom eases in and back out over `ramp` seconds at each edge of
+        its window instead of snapping to full scale instantly (a hard-cut
+        pop previously) — now a smooth push-in/out.
+
+        Implementation note: this ffmpeg build's `crop` filter no longer
+        re-evaluates its w/h per frame (no `eval` option at all), and while
+        `scale` does support eval=frame, an INCREASING size expression
+        (0->1.0 fraction rising) re-evaluates correctly per frame but a
+        DECREASING one measured directly against the stream's own clock does
+        not (empirically verified — it stays flat instead of easing down).
+        The fix: build the ease-out portion by trimming just that edge,
+        reversing it, applying the same (proven-correct) *increasing*
+        formula to the reversed frames, then reversing back — a decreasing
+        curve in playback order made entirely out of the increasing curve
+        that actually works. Ease-in, a constant-scale hold, and this
+        reversed ease-out are then concatenated into one small "zoom clip"
+        per window and overlaid onto the base at that window's time offset.
         """
         if not zooms:
             shutil.copy2(video_path, output_path)
             return output_path
 
+        width, height = self.get_video_size(video_path)
         cap = max(1, min(int(max_zooms or 5), 8))
         scale_cap = min(max(float(max_scale or 1.25), 1.08), 1.4)
+        ramp = max(0.05, min(float(ramp or 0.18), 0.4))
         zooms = sorted(zooms, key=lambda z: float(z.get("time") or 0))[:cap]
         n = len(zooms)
         rebuilt = [
@@ -812,13 +855,56 @@ class FFmpegService:
         current = "base"
         for i, z in enumerate(zooms):
             t0 = float(z.get("time") or 0)
-            dur = float(z.get("duration") or 0.6)
-            t1 = t0 + max(0.25, dur)
+            dur = max(0.25, float(z.get("duration") or 0.6))
+            t1 = t0 + dur
             scale = min(max(float(z.get("scale") or 1.12), 1.05), scale_cap)
+            r = min(ramp, dur / 2.2)
+            ease_expr = f"(1+({scale}-1)*max(0,min(t/{r:.3f},1)))"
+
+            hold_dur = dur - 2 * r
+            has_hold = hold_dur > 0.05
+            # Only split into as many branches as are actually used below —
+            # an unconsumed split output is a hard filtergraph error
+            # ("output N unconnected"), so the 3-way split must not happen
+            # when there's no hold segment for a short zoom window.
             rebuilt.append(
-                f"[src{i}]scale=iw*{scale}:ih*{scale},"
-                f"crop=iw/{scale}:ih/{scale}[z{i}]"
+                f"[src{i}]split=3[si{i}][sh{i}][so{i}]"
+                if has_hold else
+                f"[src{i}]split=2[si{i}][so{i}]"
             )
+            # setsar=1 on every branch: the eval=frame scale's fractional
+            # pixel math can leave a slightly different (non-square) SAR on
+            # the ease segments than the plain constant-scale hold segment —
+            # concat refuses to join inputs whose SAR doesn't match exactly.
+            rebuilt.append(
+                f"[si{i}]trim=start={t0:.3f}:duration={r:.3f},setpts=PTS-STARTPTS,"
+                f"scale=w='iw*{ease_expr}':h='ih*{ease_expr}':eval=frame,"
+                f"crop={width}:{height}:x='(iw-{width})/2':y='(ih-{height})/2',"
+                f"setsar=1[zin{i}]"
+            )
+            rebuilt.append(
+                f"[so{i}]trim=start={t0 + dur - r:.3f}:duration={r:.3f},"
+                f"setpts=PTS-STARTPTS,reverse,"
+                f"scale=w='iw*{ease_expr}':h='ih*{ease_expr}':eval=frame,"
+                f"crop={width}:{height}:x='(iw-{width})/2':y='(ih-{height})/2',"
+                f"setsar=1,reverse[zout{i}]"
+            )
+            if has_hold:
+                rebuilt.append(
+                    f"[sh{i}]trim=start={t0 + r:.3f}:duration={hold_dur:.3f},"
+                    f"setpts=PTS-STARTPTS,scale=iw*{scale}:ih*{scale},"
+                    f"crop={width}:{height},setsar=1[zhold{i}]"
+                )
+                rebuilt.append(
+                    f"[zin{i}][zhold{i}][zout{i}]concat=n=3:v=1:a=0,"
+                    f"setpts=PTS+{t0:.3f}/TB[z{i}]"
+                )
+            else:
+                rebuilt.append(
+                    f"[zin{i}][zout{i}]concat=n=2:v=1:a=0,"
+                    f"setpts=PTS+{t0:.3f}/TB[z{i}]"
+                )
+
             out = "vout" if i == n - 1 else f"vz{i}"
             rebuilt.append(
                 f"[{current}][z{i}]overlay=(W-w)/2:(H-h)/2:"
@@ -831,13 +917,17 @@ class FFmpegService:
             self.ffmpeg_bin, "-y", "-i", video_path,
             "-filter_complex", ";".join(rebuilt),
             "-map", "[vout]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "copy",
             "-movflags", "+faststart",
             output_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning("apply_zoom_moments ffmpeg failed, shipping without zooms: %s", err)
+            if on_fallback:
+                on_fallback(f"zooms not applied (ffmpeg error): {err[:150]}")
             shutil.copy2(video_path, output_path)
             return output_path
         return output_path
@@ -940,17 +1030,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if idx + 1 < len(lines):
                 next_start = float(lines[idx + 1][0]["start"])
                 end = min(end, max(start + 0.12, next_start - 0.04))
-            parts = []
-            for x in group:
-                word = escape_ass(x["word"])
-                if is_hot(str(x["word"])):
-                    parts.append(f"{hot_c}{word}{reset_c}")
-                else:
-                    parts.append(word)
-            text = " ".join(parts)
-            events.append(
-                f"Dialogue: 0,{ts(start)},{ts(end)},Default,,0,0,0,,{pop_tag()}{text}"
-            )
+
+            # Per-word active-highlight windows within [start, end]: the
+            # currently-spoken word pops in accent color while the rest of
+            # the chunk stays visible in place — real karaoke-style sync to
+            # speech, instead of one static color applied for the whole
+            # chunk's on-screen duration.
+            word_starts = [max(start, float(w["start"])) for w in group]
+            bounds = []
+            for wi in range(len(group)):
+                w_start = max(start, min(word_starts[wi], end - 0.02))
+                w_end = word_starts[wi + 1] if wi + 1 < len(group) else end
+                w_end = min(max(w_end, w_start + 0.06), end)
+                bounds.append((w_start, w_end))
+
+            for wi, (w_start, w_end) in enumerate(bounds):
+                if w_end <= w_start:
+                    continue
+                parts = []
+                for gi, x in enumerate(group):
+                    word = escape_ass(x["word"])
+                    if gi == wi or is_hot(str(x["word"])):
+                        parts.append(f"{hot_c}{word}{reset_c}")
+                    else:
+                        parts.append(word)
+                text = " ".join(parts)
+                lead = pop_tag() if wi == 0 else ""
+                events.append(
+                    f"Dialogue: 0,{ts(w_start)},{ts(w_end)},Default,,0,0,0,,{lead}{text}"
+                )
 
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
@@ -973,7 +1081,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         cmd = [
             self.ffmpeg_bin, "-y", "-i", video_path,
             "-vf", filt,
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "copy",
             "-movflags", "+faststart",
             output_path,
@@ -1102,6 +1210,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         width: int = 1080,
         height: int = 1920,
         mode: str = "flash",
+        on_fallback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """
         Photo inserts timed to speech.
@@ -1159,7 +1268,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         cmd.extend([
             "-filter_complex", ";".join(parts),
             "-map", "[vout]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
             "-shortest",
             "-movflags", "+faststart",
@@ -1167,6 +1276,93 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         ])
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning("overlay_broll_images ffmpeg failed, shipping without B-roll: %s", err)
+            if on_fallback:
+                on_fallback(f"B-roll not applied (ffmpeg error): {err[:150]}")
+            shutil.copy2(video_path, output_path)
+            return output_path
+        return output_path
+
+    def overlay_broll_clips(
+        self,
+        video_path: str,
+        output_path: str,
+        inserts: List[Dict],
+        width: int = 1080,
+        height: int = 1920,
+        mode: str = "flash",
+        on_fallback: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """
+        Real stock-video B-roll inserts timed to speech — a moving clip
+        instead of overlay_broll_images' static photo. Each insert is decoded
+        with -stream_loop -1 so it always has live (non-frozen) frames
+        available whenever its enable() window activates, regardless of how
+        short the source stock clip is or how late in the main video its
+        window starts; -shortest on the output still bounds total runtime to
+        the base video's length, exactly like the photo overlay path.
+        mode=flash: full-frame semi-transparent (kept lower opacity).
+        mode=pip: lower-third card so talking-head stays visible.
+        """
+        valid = [
+            i for i in inserts
+            if i.get("path") and os.path.isfile(i["path"])
+        ][:6]
+        if not valid:
+            shutil.copy2(video_path, output_path)
+            return output_path
+
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        cmd = [self.ffmpeg_bin, "-y", "-i", video_path]
+        for item in valid:
+            cmd.extend(["-stream_loop", "-1", "-i", item["path"]])
+
+        n = len(valid)
+        parts = []
+        current = "0:v"
+        pip = (mode or "flash").lower() == "pip"
+        for i, item in enumerate(valid):
+            t0 = float(item.get("time") or 0)
+            dur = max(0.6, float(item.get("duration") or 1.5))
+            t1 = t0 + dur
+            opacity = float(item.get("opacity") or (0.6 if not pip else 0.95))
+            opacity = min(max(opacity, 0.35), 0.98)
+            inp = i + 1
+            if pip:
+                card_h = int(height * 0.42)
+                parts.append(
+                    f"[{inp}:v]scale={width}:{card_h}:force_original_aspect_ratio=increase,"
+                    f"crop={width}:{card_h},format=rgba,colorchannelmixer=aa={opacity}[br{i}]"
+                )
+                pos = f"0:{height - card_h}"
+            else:
+                parts.append(
+                    f"[{inp}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                    f"crop={width}:{height},format=rgba,colorchannelmixer=aa={opacity}[br{i}]"
+                )
+                pos = "0:0"
+            out = "vout" if i == n - 1 else f"vb{i}"
+            parts.append(
+                f"[{current}][br{i}]overlay={pos}:enable='between(t\\,{t0}\\,{t1})'[{out}]"
+            )
+            current = out
+
+        cmd.extend([
+            "-filter_complex", ";".join(parts),
+            "-map", "[vout]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+            "-c:a", "aac", "-b:a", "128k",
+            "-shortest",
+            "-movflags", "+faststart",
+            output_path,
+        ])
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning("overlay_broll_clips ffmpeg failed, shipping without video B-roll: %s", err)
+            if on_fallback:
+                on_fallback(f"video B-roll not applied (ffmpeg error): {err[:150]}")
             shutil.copy2(video_path, output_path)
             return output_path
         return output_path
@@ -1177,19 +1373,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         music_path: str,
         output_path: str,
         music_volume: float = 0.14,
+        on_fallback: Optional[Callable[[str], None]] = None,
     ) -> str:
-        """Mix bed under voice with soft ducking via sidechain when available."""
+        """Mix bed under voice with soft ducking via sidechain when available.
+
+        The voice track is loudness-normalized (EBU R128, single-pass) before
+        mixing so output loudness is consistent across generations regardless
+        of how quiet/loud the original upload was — previously music volume
+        was a flat multiplier applied blindly on top of whatever the source
+        loudness happened to be.
+        """
         if not music_path or not os.path.isfile(music_path):
             shutil.copy2(video_path, output_path)
             return output_path
 
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         vol = min(max(music_volume, 0.04), 0.35)
+        loudnorm = "loudnorm=I=-16:TP=-1.5:LRA=11"
 
         # Prefer sidechain ducking; fall back to quiet amix
         filter_duck = (
             f"[1:a]volume={vol * 2:.3f},aloop=loop=-1:size=2e+09,aformat=fltp[music];"
-            f"[0:a]asplit=2[voice][sc];"
+            f"[0:a]{loudnorm},asplit=2[voice][sc];"
             f"[music][sc]sidechaincompress=threshold=0.04:ratio=7:attack=25:release=280:makeup=1[ducked];"
             f"[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2[aout]"
         )
@@ -1208,13 +1413,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode == 0:
             return output_path
+        duck_err = (result.stderr or "")[-300:]
 
         filter_simple = (
+            f"[0:a]{loudnorm}[voice];"
             f"[1:a]volume={vol:.3f},aloop=loop=-1:size=2e+09[bg];"
-            f"[0:a][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            f"[voice][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]"
         )
-        cmd[cmd.index(filter_duck)] = filter_simple
-        # rebuild carefully
         cmd = [
             self.ffmpeg_bin, "-y",
             "-i", video_path,
@@ -1229,6 +1434,71 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning(
+                "mix_background_music ffmpeg failed (duck: %s | simple: %s), shipping without music",
+                duck_err, err,
+            )
+            if on_fallback:
+                on_fallback(f"music not mixed (ffmpeg error): {err[:150]}")
+            shutil.copy2(video_path, output_path)
+            return output_path
+        return output_path
+
+    def overlay_audio_stings(
+        self,
+        video_path: str,
+        output_path: str,
+        stings: List[Dict],
+        on_fallback: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """
+        Mix short one-shot SFX (whoosh on a zoom, pop on a hook…) into the
+        existing audio track at given timestamps. stings: [{time, path, volume}].
+        Video stream is untouched (-c:v copy); only audio is re-encoded.
+        """
+        valid = [
+            s for s in stings
+            if s.get("path") and os.path.isfile(s["path"])
+        ][:8]
+        if not valid:
+            shutil.copy2(video_path, output_path)
+            return output_path
+
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        cmd = [self.ffmpeg_bin, "-y", "-i", video_path]
+        for s in valid:
+            cmd.extend(["-i", s["path"]])
+
+        parts = ["[0:a]aformat=sample_rates=44100:channel_layouts=stereo[base_a]"]
+        mix_inputs = ["[base_a]"]
+        for i, s in enumerate(valid):
+            t0 = max(0.0, float(s.get("time") or 0))
+            vol = min(max(float(s.get("volume") or 0.5), 0.05), 1.0)
+            delay_ms = int(t0 * 1000)
+            parts.append(
+                f"[{i + 1}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+                f"volume={vol},adelay={delay_ms}:all=1[sfx{i}]"
+            )
+            mix_inputs.append(f"[sfx{i}]")
+        parts.append(
+            f"{''.join(mix_inputs)}amix=inputs={len(mix_inputs)}:duration=first:"
+            f"dropout_transition=0,alimiter=limit=0.95[aout]"
+        )
+        cmd.extend([
+            "-filter_complex", ";".join(parts),
+            "-map", "0:v", "-map", "[aout]",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "160k",
+            "-movflags", "+faststart",
+            output_path,
+        ])
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning("overlay_audio_stings ffmpeg failed, shipping without SFX: %s", err)
+            if on_fallback:
+                on_fallback(f"SFX not applied (ffmpeg error): {err[:150]}")
             shutil.copy2(video_path, output_path)
             return output_path
         return output_path

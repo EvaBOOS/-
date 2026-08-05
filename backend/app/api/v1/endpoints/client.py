@@ -229,6 +229,7 @@ async def create_viral_edit(
     intensity: str = Form("full"),
     genre: str = Form("default"),
     hook_variants: int = Form(1),
+    music_mode: str = Form("auto"),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
@@ -237,6 +238,8 @@ async def create_viral_edit(
     Whisper (optional) → optional voiceover/dub → format → zooms/B-roll/hook/music → karaoke → virality score.
     Silent clips (no speech) are supported; pass voiceover_text to add TTS later.
     Optional: platform (shorts/reels/tiktok), intensity (full/lite), genre, hook_variants (1–3).
+    music_mode: "auto" (default — client's uploaded track if set, else mood-based
+    auto-pick) or "off" (keep the source clip's own audio, no bed on top at all).
     """
     if client.credits_remaining <= 0:
         raise HTTPException(
@@ -272,6 +275,9 @@ async def create_viral_edit(
 
     font_norm = _normalize_font_id(font_id)
     vo_norm = (voiceover_text or "").strip()[:4000]
+    music_mode_norm = (music_mode or "auto").strip().lower()
+    if music_mode_norm not in {"auto", "off"}:
+        music_mode_norm = "auto"
 
     saved_path, display_name, validated_url = await _save_upload_or_url(
         file=file,
@@ -299,6 +305,7 @@ async def create_viral_edit(
             "intensity": intensity_norm,
             "genre": genre_norm,
             "hook_variants": hooks_n,
+            "music_mode": music_mode_norm,
         },
     )
     db.add(generation)
@@ -810,6 +817,111 @@ async def upload_client_font(
             "subtitle_font_path": branding.subtitle_font_path,
         },
     }
+
+
+@router.post("/branding/music")
+async def upload_client_music(
+    file: UploadFile = File(...),
+    track_name: str = Form(""),
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload a custom background-music track for viral-edit generations.
+    When set, this replaces the automatic mood-based track pick entirely —
+    the client is responsible for having the rights to whatever they upload,
+    same as with any other media they submit to the platform.
+    """
+    from app.models.client import ClientBranding
+    from app.services.video.ffmpeg_service import FFmpegService
+
+    filename = file.filename or "custom.mp3"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {".mp3", ".wav", ".m4a", ".aac", ".ogg"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Allowed formats: mp3, wav, m4a, aac, ogg",
+        )
+
+    upload_dir = os.path.join(settings.UPLOAD_DIR, "music", str(client.id))
+    os.makedirs(upload_dir, exist_ok=True)
+    saved = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join(upload_dir, saved)
+
+    content = await file.read()
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Max music file size is 15MB")
+    if len(content) < 1000:
+        raise HTTPException(status_code=400, detail="Empty or invalid audio file")
+
+    async with aiofiles.open(filepath, "wb") as out:
+        await out.write(content)
+
+    # Reject files that aren't actually decodable audio (wrong extension,
+    # truncated upload, etc.) before they can break a later generation.
+    duration = FFmpegService().get_video_duration(filepath)
+    if duration <= 0:
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
+        raise HTTPException(status_code=400, detail="File is not valid audio")
+
+    stem = os.path.splitext(os.path.basename(filename))[0]
+    name = (track_name or stem or "Custom track").strip()[:80]
+
+    result = await db.execute(
+        select(Client)
+        .options(selectinload(Client.branding))
+        .where(Client.id == client.id)
+    )
+    row = result.scalar_one()
+    branding = row.branding
+    if not branding:
+        branding = ClientBranding(client_id=client.id)
+        db.add(branding)
+
+    branding.custom_music_name = name
+    branding.custom_music_path = filepath
+    await db.commit()
+    await db.refresh(branding)
+    return {
+        "message": "Custom music uploaded",
+        "name": name,
+        "duration_sec": round(duration, 1),
+        "branding": {
+            "custom_music_name": branding.custom_music_name,
+            "custom_music_path": branding.custom_music_path,
+        },
+    }
+
+
+@router.delete("/branding/music")
+async def delete_client_music(
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove the custom track — generations go back to automatic mood-based music."""
+    result = await db.execute(
+        select(Client)
+        .options(selectinload(Client.branding))
+        .where(Client.id == client.id)
+    )
+    row = result.scalar_one()
+    branding = row.branding
+    if not branding or not branding.custom_music_path:
+        return {"message": "No custom music set"}
+
+    old_path = branding.custom_music_path
+    branding.custom_music_path = None
+    branding.custom_music_name = None
+    await db.commit()
+    try:
+        if old_path and os.path.isfile(old_path):
+            os.remove(old_path)
+    except OSError:
+        pass
+    return {"message": "Custom music removed"}
 
 
 @router.get("/assets/photos")

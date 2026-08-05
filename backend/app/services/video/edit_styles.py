@@ -21,7 +21,7 @@ STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
         "font_size": 64,
         "hot_font_size": 72,
         "words_per_chunk": 4,
-        "caption_pop": False,
+        "caption_pop": True,
         "outline": 3,
         "hint": "Fast retention edits, more zooms, punchy hook, energetic mood.",
     },

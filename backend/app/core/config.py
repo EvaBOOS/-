@@ -57,6 +57,16 @@ class Settings(BaseSettings):
     # Free stock photos (optional — stickers/fonts work without these)
     PEXELS_API_KEY: Optional[str] = None
     UNSPLASH_ACCESS_KEY: Optional[str] = None
+    # Free-tier CC-licensed background music (optional). Get a client_id at
+    # https://developer.jamendo.com — results are filtered to CC-BY/CC0 only
+    # (no -NC/-ND), never NC/ND tracks. Without a key, the mood-track/pad
+    # fallback chain in MusicLibraryService is used as before.
+    JAMENDO_CLIENT_ID: Optional[str] = None
+    # Free-tier SFX (whoosh on zooms, pop on hooks) via Freesound.org — get a
+    # token at https://freesound.org/apiv2/apply/. Results are filtered to
+    # CC0/CC-BY licenses only. Without a key, SFX stings are silently skipped.
+    FREESOUND_API_KEY: Optional[str] = None
+    SFX_ENABLED: bool = True
     # Whisper model via AITUNNEL / OpenAI-compatible STT
     WHISPER_MODEL: str = "whisper-1"
     

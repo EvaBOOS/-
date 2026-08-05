@@ -24,6 +24,34 @@ from app.services.branding_watermark import resolve_export_watermark
 from app.services.video.content_presets import normalize_platform
 
 
+def _snap_to_word_boundary(t: float, words: list, edge: str, max_shift: float = 1.5) -> float:
+    """
+    Snap an LLM-picked cut point to the nearest actual word start/end so cuts
+    don't land mid-word. The LLM only ever saw sentence-level segments (or a
+    truncated transcript), so its numeric start/end guesses are frequently
+    off by a fraction of a second — enough to slice through a word.
+    """
+    if not words:
+        return t
+    if edge == "start":
+        candidates = [
+            float(w["start"]) for w in words
+            if float(w.get("start", 0)) <= t + 0.05
+        ]
+        if not candidates:
+            return t
+        best = max(candidates)
+        return best if t - best <= max_shift else t
+    candidates = [
+        float(w["end"]) for w in words
+        if float(w.get("end", 0)) >= t - 0.05
+    ]
+    if not candidates:
+        return t
+    best = min(candidates)
+    return best if best - t <= max_shift else t
+
+
 class AiClipsPipeline:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -162,6 +190,10 @@ class AiClipsPipeline:
             for i, clip in enumerate(plan):
                 raw = os.path.join(work_dir, f"raw_{i+1}.mp4")
                 framed = os.path.join(work_dir, f"clip_{i+1}.mp4")
+                snapped_start = _snap_to_word_boundary(float(clip["start"]), words, "start")
+                snapped_end = _snap_to_word_boundary(float(clip["end"]), words, "end")
+                if snapped_end - snapped_start >= 2.0:
+                    clip["start"], clip["end"] = snapped_start, snapped_end
                 self.ffmpeg.cut_clip(source, raw, clip["start"], clip["end"])
                 self.ffmpeg.scale_to_format(
                     raw,
@@ -215,6 +247,9 @@ class AiClipsPipeline:
                         watermark_position=wm.get("position") or "bottom_right",
                         watermark_opacity=int(wm.get("opacity") or 70),
                         watermark_scale=int(wm.get("scale") or 13),
+                        on_fallback=lambda m, idx=i: generation.api_responses.setdefault(
+                            "edit_warnings", []
+                        ).append(f"clip {idx + 1}: {m}"),
                     )
                     shutil.copy2(marked, out_path)
                     if i == 0:

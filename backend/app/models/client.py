@@ -72,6 +72,11 @@ class ClientBranding(Base):
     # Brand Colors (for future use)
     primary_color = Column(String(20), nullable=True)
     secondary_color = Column(String(20), nullable=True)
+
+    # Client's own uploaded background-music track — when set, used instead
+    # of the automatic mood-based pick for every viral-edit generation.
+    custom_music_path = Column(String(500), nullable=True)
+    custom_music_name = Column(String(120), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

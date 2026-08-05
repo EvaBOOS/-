@@ -253,7 +253,8 @@ class AssetLibraryService:
         self.fonts_dir = os.path.join(self.assets_root, "fonts")
         self.stickers_cache = os.path.join(self.cache_dir, "stickers")
         self.photos_cache = os.path.join(self.cache_dir, "photos")
-        for d in (self.fonts_dir, self.stickers_cache, self.photos_cache):
+        self.sfx_cache = os.path.join(self.cache_dir, "sfx")
+        for d in (self.fonts_dir, self.stickers_cache, self.photos_cache, self.sfx_cache):
             os.makedirs(d, exist_ok=True)
 
     # ------------------------------------------------------------------ status
@@ -268,6 +269,14 @@ class AssetLibraryService:
                 "pexels": bool(settings.PEXELS_API_KEY),
                 "unsplash": bool(settings.UNSPLASH_ACCESS_KEY),
                 "ready": bool(settings.PEXELS_API_KEY or settings.UNSPLASH_ACCESS_KEY),
+            },
+            "video_broll": {
+                "pexels": bool(settings.PEXELS_API_KEY),
+                "ready": bool(settings.PEXELS_API_KEY),
+            },
+            "sfx": {
+                "provider": "freesound",
+                "ready": bool(settings.FREESOUND_API_KEY and settings.SFX_ENABLED),
             },
             "fonts": {
                 "provider": "library",
@@ -512,6 +521,140 @@ class AssetLibraryService:
             return dest
         try:
             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return None
+                with open(dest, "wb") as f:
+                    f.write(resp.content)
+            return dest
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------ stock video (B-roll)
+    async def search_videos(
+        self, query: str, per_page: int = 6
+    ) -> List[Dict[str, Any]]:
+        """
+        Real stock-video B-roll (Pexels Videos only — Unsplash has no video API).
+        Picks a single reasonably-sized file per clip (~720p) to keep
+        download/decode fast; Pexels lists video_files smallest-to-largest.
+        """
+        if not settings.PEXELS_API_KEY:
+            return []
+        headers = {"Authorization": settings.PEXELS_API_KEY}
+        params = {"query": query, "per_page": per_page, "orientation": "portrait"}
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    "https://api.pexels.com/videos/search",
+                    headers=headers,
+                    params=params,
+                )
+                if resp.status_code != 200:
+                    return []
+                data = resp.json()
+        except Exception:
+            return []
+
+        out = []
+        for video in data.get("videos") or []:
+            files = [
+                f for f in (video.get("video_files") or [])
+                if f.get("link") and (f.get("file_type") or "").startswith("video/")
+            ]
+            if not files:
+                continue
+            # Prefer the smallest file at or above 720px tall; else the largest available.
+            files.sort(key=lambda f: int(f.get("height") or 0))
+            pick = next((f for f in files if int(f.get("height") or 0) >= 720), files[-1])
+            out.append({
+                "id": str(video.get("id")),
+                "provider": "pexels",
+                "url": pick.get("link"),
+                "duration": video.get("duration"),
+                "width": pick.get("width"),
+                "height": pick.get("height"),
+                "thumb": (video.get("image") or ""),
+            })
+        return out
+
+    async def download_video(self, url: str, video_id: str = "") -> Optional[str]:
+        key = video_id or hashlib.sha1(url.encode()).hexdigest()[:16]
+        dest = os.path.join(self.photos_cache, f"broll_{key}.mp4")
+        if os.path.isfile(dest) and os.path.getsize(dest) > 5000:
+            return dest
+        try:
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return None
+                with open(dest, "wb") as f:
+                    f.write(resp.content)
+            return dest
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------ SFX (Freesound)
+    # Only these license families are ever accepted — public domain and
+    # attribution-only. Freesound's "Sampling+" and any "-NC"/non-commercial
+    # license are deliberately excluded: this platform's output is sold to
+    # paying clients, so anything non-commercial is legally off-limits.
+    _SFX_SAFE_LICENSE_PREFIXES = (
+        "http://creativecommons.org/publicdomain/zero/",
+        "https://creativecommons.org/publicdomain/zero/",
+        "http://creativecommons.org/licenses/by/",
+        "https://creativecommons.org/licenses/by/",
+    )
+
+    async def search_sfx(self, query: str, per_page: int = 5) -> List[Dict[str, Any]]:
+        """Short one-shot SFX (whoosh, pop, ding…) via Freesound, CC0/CC-BY only."""
+        if not (settings.FREESOUND_API_KEY and settings.SFX_ENABLED):
+            return []
+        params = {
+            "query": query,
+            "token": settings.FREESOUND_API_KEY,
+            "page_size": min(max(per_page, 1), 15),
+            # Keep results to short one-shot stings, not music beds or long ambiences.
+            "filter": "duration:[0.1 TO 6]",
+            "fields": "id,name,previews,license,duration",
+            "sort": "score",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.get(
+                    "https://freesound.org/apiv2/search/text/", params=params
+                )
+                if resp.status_code != 200:
+                    return []
+                data = resp.json()
+        except Exception:
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for item in data.get("results") or []:
+            lic = str(item.get("license") or "")
+            if not lic.startswith(self._SFX_SAFE_LICENSE_PREFIXES):
+                continue
+            previews = item.get("previews") or {}
+            url = previews.get("preview-hq-mp3") or previews.get("preview-lq-mp3")
+            if not url:
+                continue
+            out.append({
+                "id": str(item.get("id")),
+                "name": item.get("name"),
+                "url": url,
+                "duration": item.get("duration"),
+                "license": lic,
+            })
+        return out
+
+    async def download_sfx(self, url: str, sfx_id: str = "") -> Optional[str]:
+        key = sfx_id or hashlib.sha1(url.encode()).hexdigest()[:16]
+        dest = os.path.join(self.sfx_cache, f"{key}.mp3")
+        if os.path.isfile(dest) and os.path.getsize(dest) > 500:
+            return dest
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     return None

@@ -113,7 +113,7 @@ def _is_youtube_bot_block(exc: BaseException) -> bool:
     )
 
 
-def _ytdlp_download(url: str, dest_dir: str, max_bytes: int) -> Tuple[str, str]:
+def _ytdlp_download(url: str, dest_dir: str, max_bytes: int) -> Tuple[str, str, Optional[str]]:
     try:
         import yt_dlp
         from yt_dlp.utils import DownloadError
@@ -231,13 +231,18 @@ def _ytdlp_download(url: str, dest_dir: str, max_bytes: int) -> Tuple[str, str]:
         )
 
     title = ""
+    caption = None
     if isinstance(info, dict):
         title = str(info.get("title") or info.get("id") or "").strip()
+        # TikTok/Reels/YouTube post caption — hashtags live here, not in title.
+        raw_caption = info.get("description")
+        if raw_caption and isinstance(raw_caption, str):
+            caption = raw_caption[:2000]
     display = title or os.path.basename(path)
-    return path, display[:200]
+    return path, display[:200], caption
 
 
-async def _cobalt_download(url: str, dest_dir: str, max_bytes: int) -> Tuple[str, str]:
+async def _cobalt_download(url: str, dest_dir: str, max_bytes: int) -> Tuple[str, str, Optional[str]]:
     base = (settings.COBALT_API_URL or "").rstrip("/")
     if not base:
         raise MediaIngestError("Cobalt не настроен")
@@ -308,17 +313,19 @@ async def _cobalt_download(url: str, dest_dir: str, max_bytes: int) -> Tuple[str
     # reopen not needed — use .mp4 rename
     final_path = os.path.join(dest_dir, f"{stem}{ext}")
     os.replace(tmp_path, final_path)
-    return final_path, f"cobalt_{stem}{ext}"
+    return final_path, f"cobalt_{stem}{ext}", None
 
 
 async def download_video_from_url(
     url: str,
     dest_dir: str,
     max_bytes: int,
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Optional[str]]:
     """
     Download video to dest_dir.
-    Returns (absolute_path, display_name).
+    Returns (absolute_path, display_name, post_caption_or_None).
+    Caption (with any hashtags) is only available via the yt-dlp path —
+    Cobalt is a plain tunnel/redirect with no metadata.
     """
     if not settings.LINK_INGEST_ENABLED:
         raise MediaIngestError("Импорт по ссылке отключён")
@@ -330,17 +337,17 @@ async def download_video_from_url(
 
     if settings.COBALT_API_URL:
         try:
-            path, name = await _cobalt_download(safe_url, dest_dir, max_bytes)
+            path, name, caption = await _cobalt_download(safe_url, dest_dir, max_bytes)
             logger.info("Ingest via Cobalt → %s", path)
-            return path, name
+            return path, name, caption
         except Exception as exc:
             logger.warning("Cobalt ingest failed: %s", exc)
             errors.append(f"Cobalt: {exc}")
 
     try:
-        path, name = await asyncio.to_thread(_ytdlp_download, safe_url, dest_dir, max_bytes)
+        path, name, caption = await asyncio.to_thread(_ytdlp_download, safe_url, dest_dir, max_bytes)
         logger.info("Ingest via yt-dlp → %s", path)
-        return path, name
+        return path, name, caption
     except MediaIngestError:
         raise
     except Exception as exc:

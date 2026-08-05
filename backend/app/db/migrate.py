@@ -11,6 +11,9 @@ async def ensure_schema_patches(engine: AsyncEngine, database_url: str) -> None:
     patches = [
         ("video_generations", "mode", "VARCHAR(32) DEFAULT 'avatar'"),
         ("video_generations", "source_video_path", "VARCHAR(500)"),
+        ("trend_insights", "hashtags", "JSON"),
+        ("client_branding", "custom_music_path", "VARCHAR(500)"),
+        ("client_branding", "custom_music_name", "VARCHAR(120)"),
     ]
 
     async with engine.begin() as conn:

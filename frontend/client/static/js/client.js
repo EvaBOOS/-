@@ -815,7 +815,8 @@ async function loadRadarTrends(forceRefresh = false) {
             return;
         }
         list.innerHTML = items.map((it) => {
-            const views = it.metrics?.views != null ? ` · ${Number(it.metrics.views).toLocaleString('ru-RU')} просмотров` : '';
+            const viewsRaw = it.metrics?.views != null ? it.metrics.views : it.metrics?.video_views;
+            const views = viewsRaw != null ? ` · ${Number(viewsRaw).toLocaleString('ru-RU')} просмотров` : '';
             const rank = it.metrics?.rank != null ? ` · #${escapeHtml(String(it.metrics.rank))}` : '';
             const dur = it.metrics?.duration_sec != null ? ` · ${escapeHtml(String(it.metrics.duration_sec))}с` : '';
             return `
@@ -890,12 +891,14 @@ function renderRadarInsight(ins) {
         return;
     }
     const tips = (ins.tips || []).map((t) => `<li>${escapeHtml(t)}</li>`).join('');
+    const hashtags = (ins.hashtags || []).map((h) => `<span class="chip">#${escapeHtml(h)}</span>`).join(' ');
     box.innerHTML = `
         <h4>${escapeHtml(ins.style_guess || 'dynamic')} · ${ins.duration_sec ? Math.round(ins.duration_sec) + 'с' : ''}</h4>
         <p><strong>Хук:</strong> ${escapeHtml(ins.hook_text || '—')}</p>
         <p>${escapeHtml(ins.transcript_summary || '')}</p>
         <p class="meta">Темп ~${ins.pace_wpm ? Math.round(ins.pace_wpm) : '—'} сл/мин</p>
         <ul>${tips}</ul>
+        ${hashtags ? `<p class="meta"><strong>Хэштеги:</strong> ${hashtags}</p>` : ''}
         <button type="button" class="btn btn-primary" id="radar-apply-viral-btn" style="margin-top:0.75rem;">В вирусный монтаж</button>
     `;
     document.getElementById('radar-apply-viral-btn')?.addEventListener('click', () => applyRadarToViral(ins.id));

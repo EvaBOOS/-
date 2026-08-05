@@ -69,6 +69,7 @@ class TrendInsight(Base):
     pace_wpm = Column(Float, nullable=True)
     style_guess = Column(String(40), nullable=True)
     tips = Column(MutableList.as_mutable(JSON), nullable=True)
+    hashtags = Column(MutableList.as_mutable(JSON), nullable=True)
     raw_llm = Column(MutableDict.as_mutable(JSON), nullable=True)
 
     credit_deducted = Column(Boolean, default=False)

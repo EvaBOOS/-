@@ -43,7 +43,7 @@ async def ensure_local_source(
 
     dest_dir = os.path.join(settings.UPLOAD_DIR, upload_subdir, str(generation.client_id))
     try:
-        path, display = await download_video_from_url(url, dest_dir, max_bytes)
+        path, display, _caption = await download_video_from_url(url, dest_dir, max_bytes)
     except MediaIngestError as exc:
         generation.status = GenerationStatus.FAILED
         generation.error_message = str(exc)[:500]

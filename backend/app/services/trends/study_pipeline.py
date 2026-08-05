@@ -2,8 +2,26 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Optional
+
+# Hashtags live in the post caption, not the spoken transcript — \w is
+# Unicode-aware in Python 3, so Cyrillic tags (#тренд) match too.
+_HASHTAG_RE = re.compile(r"#(\w{1,50})", re.UNICODE)
+
+
+def extract_hashtags(caption: Optional[str], limit: int = 15) -> list[str]:
+    if not caption:
+        return []
+    out: list[str] = []
+    for m in _HASHTAG_RE.finditer(caption):
+        tag = m.group(1)
+        if tag and tag not in out:
+            out.append(tag)
+        if len(out) >= limit:
+            break
+    return out
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,7 +77,7 @@ class TrendStudyPipeline:
             insight.progress_percent = 15
             await self.db.commit()
             try:
-                path, display = await download_video_from_url(
+                path, display, caption = await download_video_from_url(
                     insight.source_url,
                     work_dir,
                     max_bytes=settings.MAX_VIRAL_UPLOAD_SIZE,
@@ -73,6 +91,7 @@ class TrendStudyPipeline:
                 return None
 
             insight.source_video_path = path
+            insight.hashtags = extract_hashtags(caption)
             insight.progress_percent = 35
             await self.db.commit()
 

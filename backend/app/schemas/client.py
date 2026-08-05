@@ -39,6 +39,8 @@ class ClientBrandingResponse(ClientBrandingBase):
     client_id: int
     watermark_path: Optional[str] = None
     subtitle_font_path: Optional[str] = None
+    custom_music_path: Optional[str] = None
+    custom_music_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

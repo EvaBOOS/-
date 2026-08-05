@@ -269,10 +269,12 @@ Output only the spoken script in {target_language}."""
             "style": style,
         }
         empty["mood"] = get_style(style).get("mood_default", empty["mood"])
-        try:
-            data = json.loads(content)
-        except Exception:
-            return empty
+        # Let a malformed-JSON response propagate — ViralEditPipeline.process()
+        # already wraps this call in its own try/except and records
+        # api_responses["edit_plan_error"]. Swallowing it here used to mean
+        # that except block never fired for the single most likely failure
+        # mode (bad LLM JSON), so a bare video shipped with no trace of why.
+        data = json.loads(content)
 
         # Backward compatible if model returns a bare list of effects
         if isinstance(data, list):
@@ -354,20 +356,153 @@ Output only the spoken script in {target_language}."""
     ) -> list:
         """
         Pick highlight windows for Shorts from a long transcript.
+
+        Long transcripts are chunked by time (map) — each chunk gets its own
+        LLM call over its own slice of segments — then all chunks' candidates
+        are merged, deduped by overlap, and pruned to max_clips by score
+        (reduce). Previously the transcript was hard-truncated to the first
+        ~6000 chars (roughly the first 6-10 minutes for spoken content), so
+        for anything longer — podcasts, streams — highlights past that point
+        were never even seen by the model.
+
         Returns: [{start, end, title, reason, score, moment}]
         """
-        import json
-
         from app.services.video.content_presets import (
             clip_duration_bounds,
             get_platform,
-            normalize_moment_label,
             normalize_platform,
         )
 
         platform = normalize_platform(platform)
         plat = get_platform(platform)
         clip_min, clip_max, clip_target = clip_duration_bounds(platform)
+
+        chunk_char_limit = 5500
+        all_candidates: list = []
+        if segments and len(transcript) > chunk_char_limit:
+            chunks = self._chunk_segments_by_chars(segments, chunk_char_limit)
+            per_chunk_budget = max(2, (max_clips // max(len(chunks), 1)) + 1)
+            for chunk_segments in chunks:
+                chunk_text = " ".join(s.get("text", "") for s in chunk_segments).strip()
+                if not chunk_text:
+                    continue
+                all_candidates.extend(
+                    await self._plan_ai_clips_call(
+                        transcript=chunk_text,
+                        segments=chunk_segments,
+                        duration=duration,
+                        language=language,
+                        max_clips=per_chunk_budget,
+                        platform=platform,
+                        plat=plat,
+                        clip_min=clip_min,
+                        clip_max=clip_max,
+                        clip_target=clip_target,
+                    )
+                )
+        else:
+            all_candidates = await self._plan_ai_clips_call(
+                transcript=transcript,
+                segments=segments,
+                duration=duration,
+                language=language,
+                max_clips=max_clips,
+                platform=platform,
+                plat=plat,
+                clip_min=clip_min,
+                clip_max=clip_max,
+                clip_target=clip_target,
+            )
+
+        if all_candidates:
+            all_candidates.sort(key=lambda c: c.get("score", 0), reverse=True)
+            picked: list = []
+            for c in all_candidates:
+                if any(self._clip_windows_overlap(c, p) for p in picked):
+                    continue
+                picked.append(c)
+                if len(picked) >= max_clips:
+                    break
+            if picked:
+                return picked
+
+        # Heuristic fallback: evenly spaced windows if LLM fails / returns nothing usable
+        if duration < clip_min:
+            return [{
+                "start": 0,
+                "end": round(duration, 2),
+                "title": "Полный фрагмент",
+                "reason": "короткое видео",
+                "score": 60,
+                "moment": "other",
+            }]
+        out = []
+        step = max(duration / max_clips, clip_target)
+        t = 5.0
+        while t + clip_min < duration and len(out) < max_clips:
+            out.append({
+                "start": round(t, 2),
+                "end": round(min(t + clip_target, duration), 2),
+                "title": f"Момент {len(out)+1}",
+                "reason": "автовыбор",
+                "score": 55,
+                "moment": "other",
+            })
+            t += step
+        if not out and duration >= 8:
+            out = [{
+                "start": 0,
+                "end": round(min(duration, clip_max), 2),
+                "title": "Клип",
+                "reason": "автовыбор",
+                "score": 50,
+                "moment": "other",
+            }]
+        return out
+
+    @staticmethod
+    def _chunk_segments_by_chars(segments: list, target_chars: int) -> list:
+        """Group time-ordered transcript segments into ~target_chars-sized batches."""
+        chunks: list = []
+        current: list = []
+        current_len = 0
+        for seg in segments:
+            seg_len = len(seg.get("text") or "")
+            if current and current_len + seg_len > target_chars:
+                chunks.append(current)
+                current = []
+                current_len = 0
+            current.append(seg)
+            current_len += seg_len
+        if current:
+            chunks.append(current)
+        return chunks
+
+    @staticmethod
+    def _clip_windows_overlap(a: dict, b: dict) -> bool:
+        return not (float(a["end"]) <= float(b["start"]) or float(b["end"]) <= float(a["start"]))
+
+    async def _plan_ai_clips_call(
+        self,
+        transcript: str,
+        segments: list,
+        duration: float,
+        language: str,
+        max_clips: int,
+        platform: str,
+        plat: dict,
+        clip_min: float,
+        clip_max: float,
+        clip_target: float,
+    ) -> list:
+        """One LLM call over a (possibly chunk-sized) transcript slice.
+
+        Returns [] on any failure — the caller (plan_ai_clips) decides whether
+        to try other chunks or fall back to the evenly-spaced heuristic.
+        """
+        import json
+
+        from app.services.video.content_presets import normalize_moment_label
 
         sample = segments[:120] if segments else []
         system_prompt = (
@@ -441,44 +576,9 @@ Output only the spoken script in {target_language}."""
                     "score": int(max(0, min(100, float(item.get("score") or 70)))),
                     "moment": normalize_moment_label(item.get("moment")),
                 })
-            clips = sorted(clips, key=lambda c: c.get("score", 0), reverse=True)[:max_clips]
-            if clips:
-                return clips
+            return clips
         except Exception:
-            pass
-        # Heuristic fallback: evenly spaced windows if LLM fails / returns nothing usable
-        if duration < clip_min:
-            return [{
-                "start": 0,
-                "end": round(duration, 2),
-                "title": "Полный фрагмент",
-                "reason": "короткое видео",
-                "score": 60,
-                "moment": "other",
-            }]
-        out = []
-        step = max(duration / max_clips, clip_target)
-        t = 5.0
-        while t + clip_min < duration and len(out) < max_clips:
-            out.append({
-                "start": round(t, 2),
-                "end": round(min(t + clip_target, duration), 2),
-                "title": f"Момент {len(out)+1}",
-                "reason": "автовыбор",
-                "score": 55,
-                "moment": "other",
-            })
-            t += step
-        if not out and duration >= 8:
-            out = [{
-                "start": 0,
-                "end": round(min(duration, clip_max), 2),
-                "title": "Клип",
-                "reason": "автовыбор",
-                "score": 50,
-                "moment": "other",
-            }]
-        return out
+            return []
 
     async def brief_from_product_url(
         self,
