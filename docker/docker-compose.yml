@@ -135,6 +135,8 @@ services:
       - BRAIN_MAX_RULES=${BRAIN_MAX_RULES:-12}
       - YTDLP_COOKIES_FILE=${YTDLP_COOKIES_FILE:-}
       - YTDLP_COOKIES_FROM_BROWSER=${YTDLP_COOKIES_FROM_BROWSER:-}
+      - FIRST_ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - FIRST_ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme123}
       - MEDIA_ROOT=/app/media
       - UPLOAD_DIR=/app/media/uploads
       - GENERATED_DIR=/app/media/generated
