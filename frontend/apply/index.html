@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoGen — заявка на доступ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/apply/static/css/apply.css">
+</head>
+<body>
+    <div class="stage">
+        <div class="card">
+            <p class="brand-mark">VideoGen</p>
+            <h1 class="title">Кабинет кампаний</h1>
+            <p class="lead">Для компаний и блогеров: индивидуальные условия, скидки и токены. Оставьте заявку — мы свяжемся с вами и настроим доступ.</p>
+
+            <form id="apply-form">
+                <div class="form-group">
+                    <label for="full-name">Имя *</label>
+                    <input type="text" id="full-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email *</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone">Телефон</label>
+                    <input type="tel" id="phone">
+                </div>
+
+                <div class="form-group">
+                    <label>Вы подаётесь как</label>
+                    <div class="type-toggle">
+                        <label class="type-option">
+                            <input type="radio" name="account-type" value="company" checked>
+                            <span>Компания</span>
+                        </label>
+                        <label class="type-option">
+                            <input type="radio" name="account-type" value="blogger">
+                            <span>Блогер</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="company-or-social" id="company-or-social-label">Компания</label>
+                    <input type="text" id="company-or-social" placeholder="Название компании">
+                </div>
+
+                <div class="form-group">
+                    <label for="message">Сообщение</label>
+                    <textarea id="message" rows="3" placeholder="Расскажите о задаче, объёмах, пожеланиях"></textarea>
+                </div>
+
+                <button type="submit" class="btn-submit">Отправить заявку</button>
+                <p id="form-error" class="error-message"></p>
+            </form>
+
+            <div id="success-message" class="success-block">
+                <p class="success-title">Заявка отправлена</p>
+                <p class="success-text">Мы свяжемся с вами в ближайшее время.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/apply/static/js/apply.js"></script>
+</body>
+</html>

@@ -161,6 +161,8 @@ class AiClipsPipeline:
             fonts_dir = None
             chosen_font_id = str((generation.api_responses or {}).get("font_id") or "").strip()
             branding = client.branding
+            emphasis_style = (branding.subtitle_emphasis_style if branding else None) or "color"
+            accent_color = branding.subtitle_accent_color if branding else None
 
             if chosen_font_id:
                 try:
@@ -202,6 +204,15 @@ class AiClipsPipeline:
                     height=settings.VIDEO_HEIGHT,
                 )
 
+                track_points = None
+                if generation.api_responses.get("kinetic_subtitles"):
+                    try:
+                        from app.services.video.face_tracking import FaceTrackingService
+                        track_points = FaceTrackingService().track_face_centers(framed)
+                    except Exception as track_err:
+                        track_points = None
+                        generation.api_responses["kinetic_subtitles_error"] = str(track_err)[:300]
+
                 # Optional karaoke for this window
                 local_words = [
                     {
@@ -213,6 +224,22 @@ class AiClipsPipeline:
                     if float(w.get("end") or 0) >= float(clip["start"])
                     and float(w.get("start") or 0) <= float(clip["end"])
                 ]
+                clip_hook_text = clip.get("title")
+                hook_3d_path = None
+                if generation.api_responses.get("volumetric_hook") and clip_hook_text:
+                    try:
+                        from app.services.video.text3d_service import render_3d_text_image
+                        png_bytes = await render_3d_text_image(
+                            clip_hook_text, font_path=generation.api_responses.get("font_path"),
+                            max_width=int(settings.VIDEO_WIDTH * 0.9),
+                        )
+                        hook_3d_path = os.path.join(work_dir, f"clip_{i+1}_hook3d.png")
+                        with open(hook_3d_path, "wb") as f:
+                            f.write(png_bytes)
+                    except Exception as hook3d_err:
+                        hook_3d_path = None
+                        generation.api_responses["volumetric_hook_error"] = str(hook3d_err)[:300]
+
                 final_clip = framed
                 if local_words:
                     ass = os.path.join(work_dir, f"clip_{i+1}.ass")
@@ -223,8 +250,11 @@ class AiClipsPipeline:
                         font_name=font_family,
                         video_width=settings.VIDEO_WIDTH,
                         video_height=settings.VIDEO_HEIGHT,
-                        hook_text=clip.get("title"),
+                        hook_text=(None if hook_3d_path else clip_hook_text),
                         hook_duration=2.2,
+                        emphasis_style=emphasis_style,
+                        track_points=track_points,
+                        accent_color=accent_color,
                     )
                     subtitled = os.path.join(work_dir, f"clip_{i+1}_sub.mp4")
                     try:
@@ -234,6 +264,16 @@ class AiClipsPipeline:
                         final_clip = subtitled
                     except Exception:
                         final_clip = framed
+
+                    if hook_3d_path:
+                        hooked = os.path.join(work_dir, f"clip_{i+1}_hooked.mp4")
+                        try:
+                            self.ffmpeg.overlay_timed_image(
+                                final_clip, hook_3d_path, hooked, start=0, end=2.2
+                            )
+                            final_clip = hooked
+                        except Exception as overlay_err:
+                            generation.api_responses["volumetric_hook_error"] = str(overlay_err)[:300]
 
                 out_name = f"final_clip_{i+1}.mp4"
                 out_path = os.path.join(work_dir, out_name)

@@ -8,12 +8,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install system dependencies
+# libglib2.0-0 + libgl1: opencv-python-headless (face tracking for kinetic
+# subtitles) still dynamically links against these on Debian slim images
+# even in "headless" builds.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libpq-dev \
     gcc \
     curl \
     nodejs \
+    libglib2.0-0 \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user

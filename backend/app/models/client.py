@@ -18,13 +18,33 @@ PLAN_LIMITS = {
 }
 
 
+class AccountType(str, enum.Enum):
+    COMPANY = "company"
+    BLOGGER = "blogger"
+    INDIVIDUAL = "individual"  # self-serve, pays for its own tokens
+
+
+class ApplicationStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class Client(Base):
     __tablename__ = "clients"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     company_name = Column(String(255), nullable=True)
-    
+    # native_enum=False: plain VARCHAR, not a Postgres native ENUM type — so
+    # adding new AccountType members later needs no ALTER TYPE migration.
+    account_type = Column(SQLEnum(AccountType, native_enum=False), default=AccountType.COMPANY, nullable=False)
+
+    # Individually negotiated B2B terms — set manually by admin, not tied to
+    # subscription_plan (which stays the self-serve-style tier).
+    discount_percent = Column(Integer, default=0)
+    offer_notes = Column(Text, nullable=True)
+
     # Subscription & Credits
     subscription_plan = Column(SQLEnum(SubscriptionPlan), default=SubscriptionPlan.BASIC)
     credits_remaining = Column(Integer, default=15)
@@ -68,7 +88,9 @@ class ClientBranding(Base):
     subtitle_font_color = Column(String(20), default="#FFFFFF")
     subtitle_bg_color = Column(String(20), nullable=True)  # Optional background
     subtitle_position = Column(String(50), default="bottom")  # top, center, bottom
-    
+    subtitle_emphasis_style = Column(String(20), default="color")  # color, glow, none
+    subtitle_accent_color = Column(String(20), nullable=True)  # highlighted-word color, e.g. #7CFFB2; None = app default
+
     # Brand Colors (for future use)
     primary_color = Column(String(20), nullable=True)
     secondary_color = Column(String(20), nullable=True)
@@ -86,3 +108,32 @@ class ClientBranding(Base):
 
     def __repr__(self):
         return f"<ClientBranding for client {self.client_id}>"
+
+
+class ClientApplication(Base):
+    """A self-submitted request from a company or blogger to get onto the
+    B2B/campaign cabinet. Reviewed manually by an admin (approve provisions
+    a User+Client exactly like the direct admin-create flow; reject just
+    records a note)."""
+    __tablename__ = "client_applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False, index=True)
+    phone = Column(String(50), nullable=True)
+    # native_enum=False: plain VARCHAR, not a Postgres native ENUM type — so
+    # adding new AccountType members later needs no ALTER TYPE migration.
+    account_type = Column(SQLEnum(AccountType, native_enum=False), default=AccountType.COMPANY, nullable=False)
+    company_name = Column(String(255), nullable=True)
+    portfolio_url = Column(String(500), nullable=True)
+    message = Column(Text, nullable=True)
+
+    status = Column(SQLEnum(ApplicationStatus, native_enum=False), default=ApplicationStatus.PENDING, nullable=False)
+    admin_note = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewed_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<ClientApplication {self.email} ({self.status})>"

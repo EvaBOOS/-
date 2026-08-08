@@ -76,6 +76,9 @@ class WhisperService:
             # last resort: 0.35s per word
             words = self._approximate_words(text, max(0.35 * len(text.split()), 1.0))
 
+        if words and text:
+            words = self._reattach_punctuation(words, text)
+
         return {
             "text": text,
             "words": words,
@@ -234,6 +237,24 @@ class WhisperService:
                 "start": float(s.get("start") or 0),
                 "end": float(s.get("end") or s.get("start") or 0),
             })
+        return out
+
+    @staticmethod
+    def _reattach_punctuation(words: List[Dict[str, Any]], text: str) -> List[Dict[str, Any]]:
+        """The word-timestamps API returns bare tokens ("паузы", "секунд")
+        with no punctuation, even though `text` has it ("паузы,", "секунд?")
+        — captions built straight from `words` end up with no commas,
+        periods or question marks at all. Re-attach it positionally from
+        `text`, which tokenizes 1:1 with `words` in the overwhelming
+        majority of real transcripts; on any mismatch (STT split the two
+        differently), leave `words` untouched rather than risk misaligning
+        them."""
+        tokens = re.findall(r"\S+", text)
+        if len(tokens) != len(words):
+            return words
+        out = []
+        for w, tok in zip(words, tokens):
+            out.append({**w, "word": tok})
         return out
 
     @staticmethod

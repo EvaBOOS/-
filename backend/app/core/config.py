@@ -108,7 +108,16 @@ class Settings(BaseSettings):
     # Default Admin
     FIRST_ADMIN_EMAIL: str = "admin@example.com"
     FIRST_ADMIN_PASSWORD: str = "changeme123"
-    
+
+    # Payments — ЮKassa (self-serve token purchases)
+    YOOKASSA_SHOP_ID: Optional[str] = None
+    YOOKASSA_SECRET_KEY: Optional[str] = None
+    # Absolute site URL — needed to build the ЮKassa return_url (redirect
+    # target after checkout). Must be a real https domain in production.
+    PUBLIC_BASE_URL: str = "http://localhost:8000"
+    # Free trial tokens granted to a new self-serve signup (POST /public/register)
+    SELF_SERVE_FREE_CREDITS: int = 3
+
     class Config:
         env_file = ".env"
         case_sensitive = True
@@ -161,5 +170,22 @@ def _validate_admin_password() -> None:
         )
 
 
+def _validate_yookassa_keys() -> None:
+    import logging
+    env = (settings.ENVIRONMENT or "development").strip().lower()
+    if env not in {"production", "prod"}:
+        return
+    if not settings.YOOKASSA_SHOP_ID or not settings.YOOKASSA_SECRET_KEY:
+        logging.getLogger(__name__).warning(
+            "YOOKASSA_SHOP_ID/YOOKASSA_SECRET_KEY not set — self-serve token purchases will fail."
+        )
+    if "localhost" in settings.PUBLIC_BASE_URL or "127.0.0.1" in settings.PUBLIC_BASE_URL:
+        logging.getLogger(__name__).warning(
+            "PUBLIC_BASE_URL still points at localhost in production — ЮKassa return_url "
+            "and the webhook notification URL won't be reachable from the outside."
+        )
+
+
 _validate_secret_key()
 _validate_admin_password()
+_validate_yookassa_keys()

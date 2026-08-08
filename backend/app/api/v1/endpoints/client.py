@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -230,6 +230,8 @@ async def create_viral_edit(
     genre: str = Form("default"),
     hook_variants: int = Form(1),
     music_mode: str = Form("auto"),
+    kinetic_subtitles: bool = Form(False),
+    volumetric_hook: bool = Form(False),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
@@ -306,6 +308,8 @@ async def create_viral_edit(
             "genre": genre_norm,
             "hook_variants": hooks_n,
             "music_mode": music_mode_norm,
+            "kinetic_subtitles": bool(kinetic_subtitles),
+            "volumetric_hook": bool(volumetric_hook),
         },
     )
     db.add(generation)
@@ -331,6 +335,8 @@ async def create_ai_clips(
     max_clips: int = Form(5),
     font_id: str = Form(""),
     platform: str = Form("auto"),
+    kinetic_subtitles: bool = Form(False),
+    volumetric_hook: bool = Form(False),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
@@ -370,6 +376,8 @@ async def create_ai_clips(
             "font_id": font_norm or None,
             "source_url": validated_url,
             "platform": platform_norm,
+            "kinetic_subtitles": bool(kinetic_subtitles),
+            "volumetric_hook": bool(volumetric_hook),
         },
     )
     db.add(generation)
@@ -811,6 +819,76 @@ async def upload_client_font(
     return {
         "message": "Custom font uploaded",
         "family": family,
+        "path": filepath,
+        "branding": {
+            "subtitle_font_name": branding.subtitle_font_name,
+            "subtitle_font_path": branding.subtitle_font_path,
+        },
+    }
+
+
+@router.get("/branding/handwriting-template")
+async def get_handwriting_template(
+    client: Client = Depends(get_current_client),
+):
+    """Printable PNG template — fill one character per cell, photograph it,
+    then POST it to /branding/handwriting-font."""
+    from app.services.fonts.handwriting_template import generate_template_image
+
+    png_bytes = await generate_template_image()
+    return Response(content=png_bytes, media_type="image/png")
+
+
+@router.post("/branding/handwriting-font")
+async def build_handwriting_font(
+    file: UploadFile = File(...),
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Build a private TTF from a photo of the filled-in handwriting
+    template and set it as this client's subtitle font. The font is stored
+    the same way as an uploaded font — private to this client, not exposed
+    to anyone else."""
+    from app.models.client import ClientBranding
+    from app.services.fonts.handwriting_font_service import (
+        HandwritingFontError,
+        build_font_from_photo,
+    )
+
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="Файл слишком большой")
+
+    try:
+        font_bytes = build_font_from_photo(content)
+    except HandwritingFontError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    upload_dir = os.path.join(settings.UPLOAD_DIR, "fonts", str(client.id))
+    os.makedirs(upload_dir, exist_ok=True)
+    filepath = os.path.join(upload_dir, f"{uuid.uuid4()}.ttf")
+
+    async with aiofiles.open(filepath, "wb") as out:
+        await out.write(font_bytes)
+
+    result = await db.execute(
+        select(Client)
+        .options(selectinload(Client.branding))
+        .where(Client.id == client.id)
+    )
+    row = result.scalar_one()
+    branding = row.branding
+    if not branding:
+        branding = ClientBranding(client_id=client.id)
+        db.add(branding)
+
+    branding.subtitle_font_name = "Мой почерк"
+    branding.subtitle_font_path = filepath
+    await db.commit()
+    await db.refresh(branding)
+    return {
+        "message": "Шрифт из почерка собран",
+        "family": branding.subtitle_font_name,
         "path": filepath,
         "branding": {
             "subtitle_font_name": branding.subtitle_font_name,

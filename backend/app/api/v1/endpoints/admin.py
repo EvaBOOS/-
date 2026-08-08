@@ -3,20 +3,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
+from datetime import datetime
 import os
 import uuid
 import aiofiles
 
 from app.api.deps import get_db, get_current_admin
-from app.core.security import get_password_hash
 from app.core.config import settings
 from app.models.user import User, UserRole
-from app.models.client import Client, ClientBranding, SubscriptionPlan, PLAN_LIMITS
+from app.models.client import (
+    Client, ClientBranding, SubscriptionPlan, PLAN_LIMITS,
+    AccountType, ApplicationStatus, ClientApplication,
+)
 from app.models.generation import VideoGeneration
 from app.schemas.client import (
     ClientCreate, ClientUpdate, ClientResponse, ClientWithBranding,
-    ClientBrandingUpdate, ClientBrandingResponse
+    ClientBrandingUpdate, ClientBrandingResponse,
+    ClientApplicationResponse, ClientApplicationApprove, ClientApplicationReject,
 )
+from app.services.client_provisioning import provision_client
 
 router = APIRouter()
 
@@ -55,47 +60,20 @@ async def create_client(
     admin: User = Depends(get_current_admin)
 ):
     """Create a new client account with user credentials."""
-    # Check if user email already exists
-    result = await db.execute(
-        select(User).where(User.email == client_data.user_email)
-    )
-    if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email already exists"
-        )
-    
-    # Create user
-    user = User(
-        email=client_data.user_email,
-        hashed_password=get_password_hash(client_data.user_password),
-        full_name=client_data.user_full_name,
-        role=UserRole.CLIENT
-    )
-    db.add(user)
-    await db.flush()
-    
-    # Create client profile
-    plan_limit = PLAN_LIMITS.get(client_data.subscription_plan, 15)
-    client = Client(
-        user_id=user.id,
+    client = await provision_client(
+        db,
+        user_email=client_data.user_email,
+        user_password=client_data.user_password,
+        user_full_name=client_data.user_full_name,
         company_name=client_data.company_name,
+        account_type=client_data.account_type,
+        discount_percent=client_data.discount_percent,
         subscription_plan=client_data.subscription_plan,
-        credits_remaining=plan_limit,
         elevenlabs_voice_id=client_data.elevenlabs_voice_id,
         heygen_avatar_id=client_data.heygen_avatar_id,
-        custom_voice_clone_id=client_data.custom_voice_clone_id
+        custom_voice_clone_id=client_data.custom_voice_clone_id,
     )
-    db.add(client)
-    await db.flush()
-    
-    # Create default branding
-    branding = ClientBranding(client_id=client.id)
-    db.add(branding)
-    
-    await db.commit()
-    await db.refresh(client)
-    
+
     # Reload with relationships
     result = await db.execute(
         select(Client)
@@ -103,11 +81,11 @@ async def create_client(
         .where(Client.id == client.id)
     )
     client = result.scalar_one()
-    
+
     response = ClientWithBranding.model_validate(client)
-    response.user_email = user.email
-    response.user_full_name = user.full_name
-    
+    response.user_email = client.user.email if client.user else None
+    response.user_full_name = client.user.full_name if client.user else None
+
     return response
 
 
@@ -407,6 +385,93 @@ async def apply_library_font(
         "path": font_file,
         "fonts_dir": fonts_dir,
     }
+
+
+@router.get("/applications", response_model=List[ClientApplicationResponse])
+async def list_applications(
+    status_filter: Optional[ApplicationStatus] = ApplicationStatus.PENDING,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """List access requests from companies/bloggers, pending by default."""
+    query = select(ClientApplication).order_by(ClientApplication.created_at.desc())
+    if status_filter is not None:
+        query = query.where(ClientApplication.status == status_filter)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.post("/applications/{application_id}/approve", response_model=ClientWithBranding)
+async def approve_application(
+    application_id: int,
+    approval: ClientApplicationApprove,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Approve a pending application: provisions the same User+Client+branding
+    trio as a direct admin-created client, using the applicant's own data."""
+    result = await db.execute(
+        select(ClientApplication).where(ClientApplication.id == application_id)
+    )
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if application.status != ApplicationStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Application already reviewed")
+
+    client = await provision_client(
+        db,
+        user_email=application.email,
+        user_password=approval.user_password,
+        user_full_name=application.full_name,
+        company_name=approval.company_name or application.company_name,
+        account_type=application.account_type,
+        discount_percent=approval.discount_percent,
+        subscription_plan=approval.subscription_plan,
+    )
+
+    application.status = ApplicationStatus.APPROVED
+    application.reviewed_at = datetime.utcnow()
+    application.reviewed_by_admin_id = admin.id
+    await db.commit()
+
+    result = await db.execute(
+        select(Client)
+        .options(selectinload(Client.branding), selectinload(Client.user))
+        .where(Client.id == client.id)
+    )
+    client = result.scalar_one()
+
+    response = ClientWithBranding.model_validate(client)
+    response.user_email = client.user.email if client.user else None
+    response.user_full_name = client.user.full_name if client.user else None
+    return response
+
+
+@router.post("/applications/{application_id}/reject", response_model=ClientApplicationResponse)
+async def reject_application(
+    application_id: int,
+    rejection: ClientApplicationReject,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Reject a pending application, optionally with a note."""
+    result = await db.execute(
+        select(ClientApplication).where(ClientApplication.id == application_id)
+    )
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if application.status != ApplicationStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Application already reviewed")
+
+    application.status = ApplicationStatus.REJECTED
+    application.admin_note = rejection.admin_note
+    application.reviewed_at = datetime.utcnow()
+    application.reviewed_by_admin_id = admin.id
+    await db.commit()
+    await db.refresh(application)
+    return application
 
 
 @router.get("/stats")

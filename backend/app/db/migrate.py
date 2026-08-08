@@ -14,6 +14,14 @@ async def ensure_schema_patches(engine: AsyncEngine, database_url: str) -> None:
         ("trend_insights", "hashtags", "JSON"),
         ("client_branding", "custom_music_path", "VARCHAR(500)"),
         ("client_branding", "custom_music_name", "VARCHAR(120)"),
+        # SQLAlchemy's Enum(AccountType) stores/reads by member *name*
+        # (COMPANY/BLOGGER), not .value — the default here must match that,
+        # not the lowercase value used in the Python/JSON layer.
+        ("clients", "account_type", "VARCHAR(20) DEFAULT 'COMPANY'"),
+        ("clients", "discount_percent", "INTEGER DEFAULT 0"),
+        ("clients", "offer_notes", "TEXT"),
+        ("client_branding", "subtitle_emphasis_style", "VARCHAR(20) DEFAULT 'color'"),
+        ("client_branding", "subtitle_accent_color", "VARCHAR(20)"),
     ]
 
     async with engine.begin() as conn:

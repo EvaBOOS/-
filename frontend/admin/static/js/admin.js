@@ -89,14 +89,115 @@ function showPage(pageName) {
     const titles = {
         'overview': 'Обзор',
         'clients': 'Клиенты',
+        'applications': 'Заявки',
         'create-client': 'Новый клиент'
     };
     document.getElementById('page-title').textContent = titles[pageName] || pageName;
-    
+
     if (pageName === 'overview') {
         loadStats();
     } else if (pageName === 'clients') {
         loadClients();
+    } else if (pageName === 'applications') {
+        loadApplications();
+    }
+}
+
+const ACCOUNT_TYPE_LABELS = { company: 'Компания', blogger: 'Блогер' };
+
+// Load Applications
+async function loadApplications() {
+    try {
+        const applications = await api('/admin/applications?status_filter=pending');
+        const tbody = document.getElementById('applications-table-body');
+
+        if (!applications.length) {
+            tbody.innerHTML = '<tr><td colspan="7">Нет новых заявок</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = applications.map(a => `
+            <tr>
+                <td>${escapeHtml(a.full_name)}</td>
+                <td>${escapeHtml(a.email)}</td>
+                <td><span class="badge badge-info">${ACCOUNT_TYPE_LABELS[a.account_type] || a.account_type}</span></td>
+                <td>${escapeHtml(a.company_name || a.portfolio_url || '-')}</td>
+                <td>${escapeHtml(a.message || '-')}</td>
+                <td>${new Date(a.created_at).toLocaleDateString('ru-RU')}</td>
+                <td>
+                    <button class="action-btn action-btn-edit" onclick="openApproveModal(${a.id}, '${escapeAttr(a.email)}', '${escapeAttr(a.company_name || a.portfolio_url || '')}')">Одобрить</button>
+                    <button class="action-btn action-btn-danger" onclick="rejectApplication(${a.id})">Отклонить</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('Failed to load applications:', e);
+    }
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str ?? '';
+    return div.innerHTML;
+}
+
+function escapeAttr(str) {
+    return escapeHtml(str).replace(/'/g, '&#39;');
+}
+
+function openApproveModal(applicationId, email, company) {
+    document.getElementById('approve-application-id').value = applicationId;
+    document.getElementById('approve-email').value = email;
+    document.getElementById('approve-password').value = '';
+    document.getElementById('approve-company').value = company;
+    document.getElementById('approve-plan').value = 'basic';
+    document.getElementById('approve-discount').value = 0;
+    document.getElementById('approve-error').textContent = '';
+    document.getElementById('approve-modal').classList.add('active');
+}
+
+function closeApproveModal() {
+    document.getElementById('approve-modal').classList.remove('active');
+}
+
+async function submitApproval() {
+    const applicationId = document.getElementById('approve-application-id').value;
+    const errorEl = document.getElementById('approve-error');
+    errorEl.textContent = '';
+
+    const password = document.getElementById('approve-password').value;
+    if (!password || password.length < 8) {
+        errorEl.textContent = 'Пароль должен быть не короче 8 символов';
+        return;
+    }
+
+    try {
+        await api(`/admin/applications/${applicationId}/approve`, {
+            method: 'POST',
+            body: JSON.stringify({
+                user_password: password,
+                company_name: document.getElementById('approve-company').value || null,
+                subscription_plan: document.getElementById('approve-plan').value,
+                discount_percent: parseInt(document.getElementById('approve-discount').value) || 0
+            })
+        });
+        closeApproveModal();
+        loadApplications();
+    } catch (e) {
+        errorEl.textContent = e.message;
+    }
+}
+
+async function rejectApplication(applicationId) {
+    if (!confirm('Отклонить эту заявку?')) return;
+    try {
+        await api(`/admin/applications/${applicationId}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({})
+        });
+        loadApplications();
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
     }
 }
 
@@ -123,6 +224,7 @@ async function loadClients() {
             <tr>
                 <td>${client.id}</td>
                 <td>${client.company_name || '-'}</td>
+                <td><span class="badge badge-info">${ACCOUNT_TYPE_LABELS[client.account_type] || client.account_type}</span></td>
                 <td>${client.user_email || '-'}</td>
                 <td><span class="badge badge-info">${client.subscription_plan}</span></td>
                 <td>${client.credits_remaining} / ${getPlanLimit(client.subscription_plan)}</td>
@@ -155,6 +257,9 @@ async function createClient(formData) {
         user_password: formData.password,
         user_full_name: formData.name,
         company_name: formData.company,
+        account_type: formData.accountType,
+        discount_percent: formData.discountPercent,
+        offer_notes: formData.offerNotes || null,
         subscription_plan: formData.plan,
         elevenlabs_voice_id: formData.voiceId || null,
         heygen_avatar_id: formData.avatarId || null
@@ -177,6 +282,9 @@ async function openClientModal(clientId) {
         
         document.getElementById('edit-client-id').value = client.id;
         document.getElementById('edit-company').value = client.company_name || '';
+        document.getElementById('edit-account-type').value = client.account_type || 'company';
+        document.getElementById('edit-discount').value = client.discount_percent || 0;
+        document.getElementById('edit-offer-notes').value = client.offer_notes || '';
         document.getElementById('edit-plan').value = client.subscription_plan;
         document.getElementById('edit-voice').value = client.elevenlabs_voice_id || '';
         document.getElementById('edit-avatar').value = client.heygen_avatar_id || '';
@@ -187,6 +295,8 @@ async function openClientModal(clientId) {
             document.getElementById('edit-font-name').value = client.branding.subtitle_font_name;
             document.getElementById('edit-font-size').value = client.branding.subtitle_font_size;
             document.getElementById('edit-font-color').value = client.branding.subtitle_font_color;
+            document.getElementById('edit-emphasis-style').value = client.branding.subtitle_emphasis_style || 'color';
+            document.getElementById('edit-accent-color').value = client.branding.subtitle_accent_color || '#FFE500';
         }
 
         await loadLibraryFonts();
@@ -194,7 +304,7 @@ async function openClientModal(clientId) {
         document.getElementById('current-credits').textContent = client.credits_remaining;
         document.getElementById('used-credits').textContent = client.credits_used_this_month;
         
-        ['edit-plan', 'edit-watermark-position', 'edit-library-font'].forEach((id) => {
+        ['edit-plan', 'edit-account-type', 'edit-watermark-position', 'edit-emphasis-style', 'edit-library-font'].forEach((id) => {
             document.getElementById(id)?.dispatchEvent(new Event('change', { bubbles: true }));
         });
         
@@ -266,6 +376,9 @@ async function saveClient() {
             method: 'PATCH',
             body: JSON.stringify({
                 company_name: document.getElementById('edit-company').value,
+                account_type: document.getElementById('edit-account-type').value,
+                discount_percent: parseInt(document.getElementById('edit-discount').value) || 0,
+                offer_notes: document.getElementById('edit-offer-notes').value || null,
                 subscription_plan: document.getElementById('edit-plan').value,
                 elevenlabs_voice_id: document.getElementById('edit-voice').value || null,
                 heygen_avatar_id: document.getElementById('edit-avatar').value || null,
@@ -280,7 +393,9 @@ async function saveClient() {
                 watermark_position: document.getElementById('edit-watermark-position').value,
                 subtitle_font_name: document.getElementById('edit-font-name').value,
                 subtitle_font_size: parseInt(document.getElementById('edit-font-size').value),
-                subtitle_font_color: document.getElementById('edit-font-color').value
+                subtitle_font_color: document.getElementById('edit-font-color').value,
+                subtitle_emphasis_style: document.getElementById('edit-emphasis-style').value,
+                subtitle_accent_color: document.getElementById('edit-accent-color').value
             })
         });
         
@@ -505,6 +620,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             password: document.getElementById('client-password').value,
             name: document.getElementById('client-name').value,
             company: document.getElementById('client-company').value,
+            accountType: document.getElementById('client-account-type').value,
+            discountPercent: parseInt(document.getElementById('client-discount').value) || 0,
+            offerNotes: document.getElementById('client-offer-notes').value,
             plan: document.querySelector('input[name="plan"]:checked').value,
             voiceId: document.getElementById('elevenlabs-voice').value,
             avatarId: document.getElementById('heygen-avatar').value
@@ -519,33 +637,42 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
     
-    // Modal controls
+    // Modal controls — close whichever modal the button lives in
     document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
-        btn.addEventListener('click', closeModal);
+        btn.addEventListener('click', () => {
+            btn.closest('.modal')?.classList.remove('active');
+            if (btn.closest('.modal')?.id === 'client-modal') currentClientId = null;
+        });
     });
-    
+
     document.getElementById('save-client-btn').addEventListener('click', saveClient);
     document.getElementById('add-credits-btn').addEventListener('click', addCredits);
     document.getElementById('reset-cycle-btn').addEventListener('click', resetCycle);
-    
+    document.getElementById('approve-submit-btn').addEventListener('click', submitApproval);
+
     // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => showTab(btn.dataset.tab));
     });
-    
+
     // File uploads
     document.getElementById('edit-watermark').addEventListener('change', () => {
         if (currentClientId) uploadFile(currentClientId, 'watermark');
     });
-    
+
     document.getElementById('edit-font').addEventListener('change', () => {
         if (currentClientId) uploadFile(currentClientId, 'font');
     });
 
     document.getElementById('apply-library-font-btn')?.addEventListener('click', applyLibraryFont);
-    
+
     // Close modal on outside click
-    document.getElementById('client-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'client-modal') closeModal();
+    document.querySelectorAll('.modal').forEach((modal) => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+                if (modal.id === 'client-modal') currentClientId = null;
+            }
+        });
     });
 });

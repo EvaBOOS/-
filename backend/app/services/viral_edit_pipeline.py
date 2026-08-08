@@ -62,6 +62,26 @@ def find_filler_word_spans(words: list, language: str = "ru") -> list:
     return spans
 
 
+_BROLL_CORNERS = ["top_right", "bottom_right", "top_left", "bottom_left"]
+_BROLL_VALID_POSITIONS = {"top_left", "top_right", "bottom_left", "bottom_right", "bottom_bar"}
+
+
+def _broll_size_position(cue: dict, index: int) -> tuple:
+    """Read the LLM's per-insert size/position choice (see
+    openai_service.plan_viral_edit), falling back to a sane default —
+    "medium" in a rotating corner — for older cached plans or malformed
+    responses that omit these fields."""
+    size = str(cue.get("size") or "medium").strip().lower()
+    if size not in {"small", "medium", "large"}:
+        size = "medium"
+    if size == "large":
+        return size, "bottom_bar"
+    position = str(cue.get("position") or "").strip().lower()
+    if position not in _BROLL_VALID_POSITIONS or position == "bottom_bar":
+        position = _BROLL_CORNERS[index % len(_BROLL_CORNERS)]
+    return size, position
+
+
 def _remove_filler_words_and_remap(words: list, filler_spans: list) -> list:
     """
     Drop filler words from the word list and shift every later word's
@@ -548,6 +568,7 @@ class ViralEditPipeline:
                     continue
                 cue_time = float(cue.get("time") or (1.2 + i * max(1.8, duration / max(broll_max, 1))))
                 cue_duration = float(cue.get("duration") or (1.4 if not source_dark else 2.0))
+                cue_size, cue_position = _broll_size_position(cue, i)
                 if video_broll_ready:
                     try:
                         vids = await self.assets.search_videos(query, per_page=3)
@@ -561,6 +582,8 @@ class ViralEditPipeline:
                                     "duration": cue_duration,
                                     "opacity": 0.55 if not source_dark else 0.85,
                                     "query": query,
+                                    "size": cue_size,
+                                    "position": cue_position,
                                 })
                     except Exception:
                         pass
@@ -580,6 +603,8 @@ class ViralEditPipeline:
                         "duration": cue_duration,
                         "opacity": 0.5 if not source_dark else 0.85,
                         "query": query,
+                        "size": cue_size,
+                        "position": cue_position,
                     })
                 except Exception:
                     continue
@@ -638,7 +663,6 @@ class ViralEditPipeline:
                         video_inserts[:broll_max],
                         width=width,
                         height=height,
-                        mode="pip",
                         on_fallback=_warn,
                     )
                     generation.api_responses["broll_type"] = "video"
@@ -649,7 +673,6 @@ class ViralEditPipeline:
                         inserts[:broll_max],
                         width=width,
                         height=height,
-                        mode="pip",
                         on_fallback=_warn,
                     )
                     generation.api_responses["broll_type"] = "photo"
@@ -698,6 +721,37 @@ class ViralEditPipeline:
             if hook_variant_texts:
                 generation.api_responses["hook_variants"] = hook_variant_texts
 
+            emphasis_style = (branding.subtitle_emphasis_style if branding else None) or "color"
+            accent_color = branding.subtitle_accent_color if branding else None
+            hook_duration = float(style_cfg.get("hook_duration") or 2.8)
+
+            track_points = None
+            if generation.api_responses.get("kinetic_subtitles"):
+                try:
+                    from app.services.video.face_tracking import FaceTrackingService
+                    track_points = FaceTrackingService().track_face_centers(broll_path)
+                except Exception as track_err:
+                    track_points = None
+                    generation.api_responses["kinetic_subtitles_error"] = str(track_err)[:300]
+
+            # Try the pseudo-3D hook image *before* deciding whether to
+            # suppress the flat ASS hook line — only drop the ASS hook if
+            # we actually have a working replacement (fail-open).
+            hook_3d_path = None
+            if generation.api_responses.get("volumetric_hook") and hook_text:
+                try:
+                    from app.services.video.text3d_service import render_3d_text_image
+                    png_bytes = await render_3d_text_image(
+                        hook_text, font_path=generation.api_responses.get("font_path"),
+                        max_width=int(width * 0.9),
+                    )
+                    hook_3d_path = os.path.join(work_dir, "hook3d.png")
+                    with open(hook_3d_path, "wb") as f:
+                        f.write(png_bytes)
+                except Exception as hook3d_err:
+                    hook_3d_path = None
+                    generation.api_responses["volumetric_hook_error"] = str(hook3d_err)[:300]
+
             ass_path = os.path.join(work_dir, "karaoke.ass")
             self.ffmpeg.write_karaoke_ass(
                 words=words,
@@ -706,13 +760,16 @@ class ViralEditPipeline:
                 font_name=font_family,
                 video_width=width,
                 video_height=height,
-                hook_text=hook_text,
-                hook_duration=float(style_cfg.get("hook_duration") or 2.8),
+                hook_text=(None if hook_3d_path else hook_text),
+                hook_duration=hook_duration,
                 font_size=int(style_cfg.get("font_size") or 64),
                 hot_font_size=int(style_cfg.get("hot_font_size") or 72),
                 words_per_chunk=int(style_cfg.get("words_per_chunk") or 4),
                 caption_pop=bool(style_cfg.get("caption_pop")),
                 outline=int(style_cfg.get("outline") or 3),
+                emphasis_style=emphasis_style,
+                track_points=track_points,
+                accent_color=accent_color,
             )
 
             subtitled = os.path.join(work_dir, "subtitled.mp4")
@@ -724,6 +781,16 @@ class ViralEditPipeline:
                 shutil.copy2(broll_path, subtitled)
                 generation.api_responses["caption_error"] = str(cap_err)[:300]
                 _warn(f"captions not burned (ffmpeg error): {str(cap_err)[:150]}")
+
+            if hook_3d_path:
+                hooked = os.path.join(work_dir, "hooked.mp4")
+                try:
+                    self.ffmpeg.overlay_timed_image(
+                        subtitled, hook_3d_path, hooked, start=0, end=hook_duration
+                    )
+                    subtitled = hooked
+                except Exception as overlay_err:
+                    generation.api_responses["volumetric_hook_error"] = str(overlay_err)[:300]
 
             # 8) Stickers (skip on silent — no topic to match, looks random)
             stickered = os.path.join(work_dir, "stickered.mp4")
@@ -904,6 +971,9 @@ class ViralEditPipeline:
                             words_per_chunk=int(style_cfg.get("words_per_chunk") or 4),
                             caption_pop=bool(style_cfg.get("caption_pop")),
                             outline=int(style_cfg.get("outline") or 3),
+                            emphasis_style=emphasis_style,
+                            track_points=track_points,
+                            accent_color=accent_color,
                         )
                         alt_sub = os.path.join(work_dir, f"subtitled_hook{i}.mp4")
                         self.ffmpeg.burn_ass_subtitles(

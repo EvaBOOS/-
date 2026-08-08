@@ -46,6 +46,7 @@
                 <ul class="nav-menu">
                     <li class="nav-item active" data-page="overview"><span>Обзор</span></li>
                     <li class="nav-item" data-page="clients"><span>Клиенты</span></li>
+                    <li class="nav-item" data-page="applications"><span>Заявки</span></li>
                     <li class="nav-item" data-page="create-client"><span>Новый клиент</span></li>
                 </ul>
                 <div class="sidebar-footer">
@@ -103,6 +104,7 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Компания</th>
+                                    <th>Тип</th>
                                     <th>Email</th>
                                     <th>Тариф</th>
                                     <th>Кредиты</th>
@@ -111,6 +113,28 @@
                                 </tr>
                             </thead>
                             <tbody id="clients-table-body">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Applications Page -->
+                <div id="page-applications" class="page">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Имя</th>
+                                    <th>Email</th>
+                                    <th>Тип</th>
+                                    <th>Компания / соцсети</th>
+                                    <th>Сообщение</th>
+                                    <th>Дата</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="applications-table-body">
                                 <!-- Dynamic content -->
                             </tbody>
                         </table>
@@ -140,9 +164,28 @@
                                         <input type="text" id="client-name">
                                     </div>
                                     <div class="form-group">
-                                        <label for="client-company">Компания</label>
+                                        <label for="client-company">Компания / соцсети</label>
                                         <input type="text" id="client-company">
                                     </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="client-account-type">Тип аккаунта</label>
+                                        <div class="select-wrap">
+                                        <select id="client-account-type" class="select-ui">
+                                            <option value="company">Компания</option>
+                                            <option value="blogger">Блогер</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="client-discount">Скидка, %</label>
+                                        <input type="number" id="client-discount" min="0" max="100" value="0">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-offer-notes">Особые условия</label>
+                                    <textarea id="client-offer-notes" rows="2" placeholder="Индивидуальные договорённости, заметки для команды"></textarea>
                                 </div>
                             </div>
 
@@ -196,6 +239,54 @@
                     </div>
                 </div>
 
+                <!-- Approve Application Modal -->
+                <div id="approve-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Одобрить заявку</h3>
+                            <button class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="approve-form">
+                                <input type="hidden" id="approve-application-id">
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="text" id="approve-email" disabled>
+                                </div>
+                                <div class="form-group">
+                                    <label>Пароль для входа *</label>
+                                    <input type="password" id="approve-password" required minlength="8">
+                                </div>
+                                <div class="form-group">
+                                    <label>Компания / соцсети</label>
+                                    <input type="text" id="approve-company">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Тариф</label>
+                                        <div class="select-wrap">
+                                        <select id="approve-plan" class="select-ui">
+                                            <option value="basic">Basic (15 видео)</option>
+                                            <option value="standard">Standard (30 видео)</option>
+                                            <option value="premium">Premium (60 видео)</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Скидка, %</label>
+                                        <input type="number" id="approve-discount" min="0" max="100" value="0">
+                                    </div>
+                                </div>
+                                <p id="approve-error" class="error-message"></p>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary modal-cancel">Отмена</button>
+                            <button type="button" class="btn btn-primary" id="approve-submit-btn">Одобрить и создать клиента</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Client Detail Modal -->
                 <div id="client-modal" class="modal">
                     <div class="modal-content">
@@ -218,6 +309,23 @@
                                     <div class="form-group">
                                         <label>Компания</label>
                                         <input type="text" id="edit-company">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Тип аккаунта</label>
+                                        <div class="select-wrap">
+                                        <select id="edit-account-type" class="select-ui">
+                                            <option value="company">Компания</option>
+                                            <option value="blogger">Блогер</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Скидка, %</label>
+                                        <input type="number" id="edit-discount" min="0" max="100">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Особые условия</label>
+                                        <textarea id="edit-offer-notes" rows="2" placeholder="Индивидуальные договорённости, заметки для команды"></textarea>
                                     </div>
                                     <div class="form-group">
                                         <label>Тариф</label>
@@ -290,6 +398,23 @@
                                         <div class="form-group">
                                             <label>Цвет шрифта</label>
                                             <input type="color" id="edit-font-color" value="#FFFFFF">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Акцент важных слов</label>
+                                            <div class="select-wrap">
+                                            <select id="edit-emphasis-style" class="select-ui">
+                                                <option value="color">Обычная подсветка</option>
+                                                <option value="glow">Тёмное свечение</option>
+                                                <option value="none">Без акцента</option>
+                                            </select>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Цвет акцента</label>
+                                            <input type="color" id="edit-accent-color" value="#FFE500">
+                                            <p class="hint">Цвет выделения ключевых слов в субтитрах. По умолчанию — жёлтый; подберите под тематику роликов клиента.</p>
                                         </div>
                                     </div>
                                 </div>

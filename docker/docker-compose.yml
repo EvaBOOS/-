@@ -75,6 +75,10 @@ services:
       - YTDLP_COOKIES_FROM_BROWSER=${YTDLP_COOKIES_FROM_BROWSER:-}
       - FIRST_ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme123}
+      - YOOKASSA_SHOP_ID=${YOOKASSA_SHOP_ID:-}
+      - YOOKASSA_SECRET_KEY=${YOOKASSA_SECRET_KEY:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8000}
+      - SELF_SERVE_FREE_CREDITS=${SELF_SERVE_FREE_CREDITS:-3}
       - MEDIA_ROOT=/app/media
       - UPLOAD_DIR=/app/media/uploads
       - GENERATED_DIR=/app/media/generated
@@ -137,6 +141,10 @@ services:
       - YTDLP_COOKIES_FROM_BROWSER=${YTDLP_COOKIES_FROM_BROWSER:-}
       - FIRST_ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme123}
+      - YOOKASSA_SHOP_ID=${YOOKASSA_SHOP_ID:-}
+      - YOOKASSA_SECRET_KEY=${YOOKASSA_SECRET_KEY:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8000}
+      - SELF_SERVE_FREE_CREDITS=${SELF_SERVE_FREE_CREDITS:-3}
       - MEDIA_ROOT=/app/media
       - UPLOAD_DIR=/app/media/uploads
       - GENERATED_DIR=/app/media/generated

@@ -404,7 +404,39 @@ class FFmpegService:
         if result.returncode != 0:
             raise Exception(f"FFmpeg sticker overlay error: {result.stderr}")
         return output_path
-    
+
+    def overlay_timed_image(
+        self,
+        video_path: str,
+        image_path: str,
+        output_path: str,
+        start: float,
+        end: float,
+        x_expr: str = "(W-w)/2",
+        y_expr: str = "180",
+    ) -> str:
+        """Composite a (typically transparent-background) image onto the
+        video, visible only during [start, end] seconds. Same overlay
+        technique as overlay_stickers, just time-gated via `enable`."""
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        cmd = [
+            self.ffmpeg_bin, "-y", "-i", video_path, "-i", image_path,
+            "-filter_complex",
+            f"[0:v][1:v]overlay={x_expr}:{y_expr}:enable='between(t,{start},{end})'[vout]",
+            "-map", "[vout]",
+            "-map", "0:a?",
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "23",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            output_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise Exception(f"FFmpeg timed overlay error: {result.stderr}")
+        return output_path
+
     def _color_to_ass(self, color: str) -> str:
         """Convert color name or hex to ASS format (BGR)."""
         color_map = {
@@ -947,19 +979,61 @@ class FFmpegService:
         words_per_chunk: int = 4,
         caption_pop: bool = False,
         outline: int = 3,
+        emphasis_style: str = "color",
+        track_points: Optional[List[Dict]] = None,
+        accent_color: Optional[str] = None,
     ) -> str:
         """
         Write ASS captions as a single non-overlapping layer.
         Highlights use inline color tags (no second Hot dialogue on top).
+
+        Two distinct cases get two distinct tag sets:
+        - "sync": the word being spoken right now (momentary karaoke pop).
+        - "emphasis": a word the LLM flagged as important (`is_hot`), which
+          stays highlighted for the whole chunk's on-screen duration, not
+          just its own window. `emphasis_style` controls how that looks:
+          "color" (cyan+bold, same as sync — legacy/default behavior),
+          "glow" (soft dark blurred halo around the word), or "none" (no
+          extra styling beyond the ordinary sync pop).
+
+        `track_points`, when given (see `face_tracking.track_face_centers`),
+        makes captions follow the tracked speaker instead of sitting at the
+        Style's fixed Alignment/MarginV position — each Dialogue line gets
+        an interpolated `\\pos(x,y)` override. Omit/None for the ordinary
+        fixed-position behavior (unchanged).
+
+        `accent_color`, when given (name or "#RRGGBB" hex), replaces the
+        default cyan/yellow used for the sync pop and "color"-style
+        emphasis — pick something that fits the footage instead of the
+        hardcoded default.
         """
         highlight = {w.lower().strip(".,!?;:«»\"'") for w in (highlight_words or [])}
         font_size = max(40, min(int(font_size or 64), 120))
         hot_font_size = max(font_size, min(int(hot_font_size or 72), 130))
         chunk_n = max(1, min(int(words_per_chunk or 4), 6))
         outline_n = max(1, min(int(outline or 3), 8))
-        # ASS BGR: white default, cyan/yellow accent for hot words
-        hot_c = r"{\c&H0000E5FF&\b1}"
-        reset_c = r"{\c&H00FFFFFF&\b0}"
+        # ASS BGR: white default, accent color (cyan/yellow unless overridden)
+        # for the word being spoken right now
+        accent_hex = self._color_to_ass(accent_color) if accent_color else "00E5FF"
+        sync_c = r"{\c&H00" + accent_hex + r"&\b1}"
+        sync_reset = r"{\c&H00FFFFFF&\b0}"
+
+        if emphasis_style == "glow":
+            # Soft dark blurred halo ("dark cloud") behind the word, text
+            # stays white/bold — distinct from the cyan sync pop.
+            emphasis_open = (
+                r"{\c&H00FFFFFF&\b1\3c&H000000&\3a&H30&\bord12\blur16}"
+            )
+            emphasis_reset = (
+                r"{\c&H00FFFFFF&\b0\3c&H000000&\3a&H00&\bord" + str(outline_n) + r"\blur0}"
+            )
+        elif emphasis_style == "none":
+            emphasis_open = ""
+            emphasis_reset = ""
+        else:  # "color" (default) — legacy behavior, identical to sync
+            emphasis_open = sync_c
+            emphasis_reset = sync_reset
+
         header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {video_width}
@@ -1050,12 +1124,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 parts = []
                 for gi, x in enumerate(group):
                     word = escape_ass(x["word"])
-                    if gi == wi or is_hot(str(x["word"])):
-                        parts.append(f"{hot_c}{word}{reset_c}")
+                    if is_hot(str(x["word"])):
+                        parts.append(f"{emphasis_open}{word}{emphasis_reset}" if emphasis_open else word)
+                    elif gi == wi:
+                        parts.append(f"{sync_c}{word}{sync_reset}")
                     else:
                         parts.append(word)
                 text = " ".join(parts)
                 lead = pop_tag() if wi == 0 else ""
+                if track_points:
+                    from app.services.video.face_tracking import resolve_position
+                    pos = resolve_position(track_points, w_start, video_width, video_height)
+                    if pos:
+                        lead = r"{\an5\pos(%d,%d)}" % (pos[0], pos[1]) + lead
                 events.append(
                     f"Dialogue: 0,{ts(w_start)},{ts(w_end)},Default,,0,0,0,,{lead}{text}"
                 )
@@ -1202,6 +1283,128 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 raise RuntimeError(result.stderr[-400:])
         return output_path
 
+    @staticmethod
+    def _broll_layer(
+        item: Dict,
+        index: int,
+        width: int,
+        height: int,
+        inp: int,
+        label: str,
+        default_mode: str,
+        max_opacity: float,
+        t0: float = 0.0,
+    ) -> tuple:
+        """Builds the per-item scale/pad/fade filter piece plus its overlay
+        x/y position expression, from the insert's own "size"/"position"
+        (set by the LLM edit-plan per moment — see openai_service.py
+        plan_viral_edit) — falling back to the legacy whole-batch `mode`
+        ("pip" -> "large", anything else -> the original full-frame
+        "flash" look) for callers/plans that predate per-item sizing.
+
+        `t0` is this item's own "-itsoffset" (see the input-building loops
+        in overlay_broll_images/overlay_broll_clips) — every broll input is
+        itsoffset-shifted by its own insert time so its decoded pts lines up
+        with the main video's absolute clock instead of starting at 0. Without
+        that shift, an insert scheduled later in the video would already be
+        finished decoding (images) or already past its own fade-out (looped
+        clips) by the time its overlay `enable()` window opens, so it would
+        render as a static frozen ghost or not appear at all. The fade
+        filter's st= values below are expressed in that same absolute clock.
+        Returns (filter_str, position_expr)."""
+        dur = max(0.6, float(item.get("duration") or 1.5))
+        opacity = float(item.get("opacity") or 0.6)
+
+        size = str(item.get("size") or "").strip().lower()
+        if size not in {"small", "medium", "large"}:
+            size = "large" if (default_mode or "flash").lower() == "pip" else "full"
+
+        if size == "full":
+            # Legacy mode=flash: whole frame, dimmer so the speaker still reads through.
+            opacity = min(max(opacity, 0.35), max_opacity)
+            filt = (
+                f"[{inp}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},format=rgba,colorchannelmixer=aa={opacity}[{label}]"
+            )
+            return filt, "0:0"
+
+        if size == "large":
+            # Legacy mode=pip: lower-third card, full width, nearly opaque.
+            opacity = min(max(opacity, 0.35), max_opacity)
+            card_h = int(height * 0.42)
+            filt = (
+                f"[{inp}:v]scale={width}:{card_h}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{card_h},format=rgba,colorchannelmixer=aa={opacity}[{label}]"
+            )
+            return filt, f"0:{height - card_h}"
+
+        # small/medium: a bordered corner card that leaves the speaker fully
+        # visible, with a quick fade in/out instead of popping on abruptly.
+        # (colorchannelmixer's "aa" is a plain static double -- it can't
+        # parse a time-varying if()/lt() expression -- so the constant base
+        # opacity comes from colorchannelmixer and the in/out ramp comes
+        # from the dedicated "fade" filter's alpha=1 mode instead.)
+        opacity = min(max(opacity, 0.8), 0.98)
+        # Bound both width AND height (force_original_aspect_ratio=decrease,
+        # fit-within-box) rather than scaling by width alone: B-roll stock
+        # photos/clips for a 9:16 video are frequently fetched in portrait
+        # orientation too, and a width-only scale on a near-square/portrait
+        # source would make even a "small" card balloon to cover half the
+        # frame height -- overlapping the speaker's face, the exact thing
+        # this per-item sizing was built to avoid.
+        card_w = int(width * (0.32 if size == "small" else 0.5))
+        card_h_max = int(height * (0.22 if size == "small" else 0.32))
+        border = 5
+        fade_s = min(0.2, dur / 4)
+        fade_in_st = t0
+        fade_out_st = t0 + max(0.0, dur - fade_s)
+        filt = (
+            f"[{inp}:v]scale={card_w}:{card_h_max}:force_original_aspect_ratio=decrease,setsar=1,"
+            f"pad=iw+{border * 2}:ih+{border * 2}:{border}:{border}:color=white,"
+            f"format=rgba,colorchannelmixer=aa={opacity},"
+            f"fade=t=in:st={fade_in_st}:d={fade_s}:alpha=1,"
+            f"fade=t=out:st={fade_out_st}:d={fade_s}:alpha=1[{label}]"
+        )
+        pad_frac = 0.05
+        position = str(item.get("position") or "").strip().lower()
+        x_expr = {
+            "top_left": f"W*{pad_frac}",
+            "bottom_left": f"W*{pad_frac}",
+        }.get(position, f"W-w-W*{pad_frac}")
+        y_expr = {
+            "top_left": f"H*{pad_frac}",
+            "top_right": f"H*{pad_frac}",
+        }.get(position, f"H-h-H*{pad_frac}")
+        return filt, f"{x_expr}:{y_expr}"
+
+    def _build_broll_filter_complex(
+        self,
+        valid: List[Dict],
+        width: int,
+        height: int,
+        default_mode: str,
+        max_opacity: float,
+    ) -> str:
+        parts = []
+        current = "0:v"
+        n = len(valid)
+        for i, item in enumerate(valid):
+            t0 = float(item.get("time") or 0)
+            dur = max(0.6, float(item.get("duration") or 1.5))
+            t1 = t0 + dur
+            inp = i + 1
+            label = f"br{i}"
+            filt, pos = self._broll_layer(
+                item, i, width, height, inp, label, default_mode, max_opacity, t0
+            )
+            parts.append(filt)
+            out = "vout" if i == n - 1 else f"vb{i}"
+            parts.append(
+                f"[{current}][{label}]overlay={pos}:enable='between(t\\,{t0}\\,{t1})'[{out}]"
+            )
+            current = out
+        return ";".join(parts)
+
     def overlay_broll_images(
         self,
         video_path: str,
@@ -1213,9 +1416,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         on_fallback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """
-        Photo inserts timed to speech.
-        mode=flash: full-frame semi-transparent (kept lower opacity).
-        mode=pip: lower-third card so talking-head stays visible.
+        Photo inserts timed to speech. Each insert picks its own size/position
+        (see _broll_layer) — `mode` is only the fallback for inserts that
+        don't specify "size" themselves (older cached edit plans).
         """
         valid = [
             i for i in inserts
@@ -1228,45 +1431,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         cmd = [self.ffmpeg_bin, "-y", "-i", video_path]
         for item in valid:
+            # Shift this input's own pts to start at its insert time so it
+            # lines up with the main video's clock -- see _broll_layer's
+            # docstring for why this matters once the overlay fades in/out.
             cmd.extend([
+                "-itsoffset", str(float(item.get("time") or 0)),
                 "-loop", "1",
                 "-t", str(max(0.5, float(item.get("duration") or 1.5))),
                 "-i", item["path"],
             ])
 
-        n = len(valid)
-        parts = []
-        current = "0:v"
-        pip = (mode or "flash").lower() == "pip"
-        for i, item in enumerate(valid):
-            t0 = float(item.get("time") or 0)
-            dur = max(0.6, float(item.get("duration") or 1.5))
-            t1 = t0 + dur
-            opacity = float(item.get("opacity") or (0.55 if not pip else 0.92))
-            opacity = min(max(opacity, 0.35), 0.92)
-            inp = i + 1
-            if pip:
-                # Lower-third card ~42% height
-                card_h = int(height * 0.42)
-                parts.append(
-                    f"[{inp}:v]scale={width}:{card_h}:force_original_aspect_ratio=increase,"
-                    f"crop={width}:{card_h},format=rgba,colorchannelmixer=aa={opacity}[br{i}]"
-                )
-                pos = f"0:{height - card_h}"
-            else:
-                parts.append(
-                    f"[{inp}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-                    f"crop={width}:{height},format=rgba,colorchannelmixer=aa={opacity}[br{i}]"
-                )
-                pos = "0:0"
-            out = "vout" if i == n - 1 else f"vb{i}"
-            parts.append(
-                f"[{current}][br{i}]overlay={pos}:enable='between(t\\,{t0}\\,{t1})'[{out}]"
-            )
-            current = out
-
+        filter_complex = self._build_broll_filter_complex(
+            valid, width, height, mode, max_opacity=0.92
+        )
         cmd.extend([
-            "-filter_complex", ";".join(parts),
+            "-filter_complex", filter_complex,
             "-map", "[vout]", "-map", "0:a?",
             "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
@@ -1302,8 +1481,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         short the source stock clip is or how late in the main video its
         window starts; -shortest on the output still bounds total runtime to
         the base video's length, exactly like the photo overlay path.
-        mode=flash: full-frame semi-transparent (kept lower opacity).
-        mode=pip: lower-third card so talking-head stays visible.
+        Each insert picks its own size/position (see _broll_layer) — `mode`
+        is only the fallback for inserts that don't specify "size"
+        themselves (older cached edit plans).
         """
         valid = [
             i for i in inserts
@@ -1316,40 +1496,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         cmd = [self.ffmpeg_bin, "-y", "-i", video_path]
         for item in valid:
-            cmd.extend(["-stream_loop", "-1", "-i", item["path"]])
+            # Same pts alignment as overlay_broll_images -- see _broll_layer's
+            # docstring. Without it a looped clip's fade-out (which runs on
+            # its own decode-from-0 clock) can finish and sit at zero alpha
+            # long before its enable() window ever opens.
+            cmd.extend([
+                "-itsoffset", str(float(item.get("time") or 0)),
+                "-stream_loop", "-1", "-i", item["path"],
+            ])
 
-        n = len(valid)
-        parts = []
-        current = "0:v"
-        pip = (mode or "flash").lower() == "pip"
-        for i, item in enumerate(valid):
-            t0 = float(item.get("time") or 0)
-            dur = max(0.6, float(item.get("duration") or 1.5))
-            t1 = t0 + dur
-            opacity = float(item.get("opacity") or (0.6 if not pip else 0.95))
-            opacity = min(max(opacity, 0.35), 0.98)
-            inp = i + 1
-            if pip:
-                card_h = int(height * 0.42)
-                parts.append(
-                    f"[{inp}:v]scale={width}:{card_h}:force_original_aspect_ratio=increase,"
-                    f"crop={width}:{card_h},format=rgba,colorchannelmixer=aa={opacity}[br{i}]"
-                )
-                pos = f"0:{height - card_h}"
-            else:
-                parts.append(
-                    f"[{inp}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-                    f"crop={width}:{height},format=rgba,colorchannelmixer=aa={opacity}[br{i}]"
-                )
-                pos = "0:0"
-            out = "vout" if i == n - 1 else f"vb{i}"
-            parts.append(
-                f"[{current}][br{i}]overlay={pos}:enable='between(t\\,{t0}\\,{t1})'[{out}]"
-            )
-            current = out
-
+        filter_complex = self._build_broll_filter_complex(
+            valid, width, height, mode, max_opacity=0.98
+        )
         cmd.extend([
-            "-filter_complex", ";".join(parts),
+            "-filter_complex", filter_complex,
             "-map", "[vout]", "-map", "0:a?",
             "-c:v", "libx264", "-preset", "medium", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",

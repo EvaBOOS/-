@@ -217,7 +217,15 @@ Output only the spoken script in {target_language}."""
             '{"effect":"zoom","time":float,"duration":float,"scale":1.08-1.2} or '
             '{"effect":"highlight_word","word":"string","time":float}. '
             "broll items (1-3 visual inserts by meaning of speech): "
-            '{"time":float,"duration":1.2-2.5,"query":"english search keywords for stock photo"}. '
+            '{"time":float,"duration":1.2-2.5,"query":"english search keywords for stock photo",'
+            '"size":"small|medium|large","position":"top_left|top_right|bottom_left|bottom_right|bottom_bar"}. '
+            "size/position: pick per-insert based on how important that visual beat is — "
+            "\"small\" or \"medium\" (a corner card, any of the 4 corner positions) is the default "
+            "for most inserts, so the speaker's face stays clearly visible and the frame doesn't "
+            "feel cluttered; use \"large\" (position must then be \"bottom_bar\") at most ONCE per "
+            "video, only for a genuinely important visual moment. Never schedule two broll windows "
+            "that overlap in time. For a light/funny beat, the query can lean reaction/meme-style "
+            "wording instead of a literal description — still in English, still stock-searchable. "
             "hook: if first 3 seconds are weak/generic (hello/today we talk), set "
             '{"use":true,"text":"short punchy hook grounded in the transcript"}; '
             "else {\"use\":false,\"text\":\"\"}. "

@@ -125,6 +125,8 @@ _FRONTEND_CANDIDATES = [
 _frontend_root = next((p for p in _FRONTEND_CANDIDATES if os.path.exists(p)), _FRONTEND_CANDIDATES[0])
 frontend_admin_path = os.path.join(_frontend_root, "admin")
 frontend_client_path = os.path.join(_frontend_root, "client")
+frontend_apply_path = os.path.join(_frontend_root, "apply")
+frontend_landing_path = os.path.join(_frontend_root, "landing")
 
 if os.path.exists(frontend_admin_path):
     app.mount("/admin/static", StaticFiles(directory=os.path.join(frontend_admin_path, "static")), name="admin_static")
@@ -132,146 +134,21 @@ if os.path.exists(frontend_admin_path):
 if os.path.exists(frontend_client_path):
     app.mount("/dashboard/static", StaticFiles(directory=os.path.join(frontend_client_path, "static")), name="client_static")
 
+if os.path.exists(frontend_apply_path):
+    app.mount("/apply/static", StaticFiles(directory=os.path.join(frontend_apply_path, "static")), name="apply_static")
+
+if os.path.exists(frontend_landing_path):
+    app.mount("/landing/static", StaticFiles(directory=os.path.join(frontend_landing_path, "static")), name="landing_static")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Root endpoint with welcome page."""
-    return """
-    <!DOCTYPE html>
-    <html lang="ru">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>VideoGen</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
-        <style>
-            :root {
-                --ink: #12140f;
-                --paper: #eef0e8;
-                --field: #d9ddd2;
-                --accent: #ff3b1f;
-                --lime: #c8f000;
-                --font-display: "Fraunces", Georgia, serif;
-                --font-ui: "Syne", "Trebuchet MS", sans-serif;
-            }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-                min-height: 100vh;
-                font-family: var(--font-ui);
-                color: var(--ink);
-                background:
-                    radial-gradient(1100px 560px at 8% 15%, rgba(200,240,0,.2), transparent 55%),
-                    radial-gradient(900px 520px at 92% 85%, rgba(255,59,31,.16), transparent 50%),
-                    linear-gradient(160deg, #c8cebb 0%, #e7ebe0 48%, #bcc3b2 100%);
-                overflow-x: hidden;
-            }
-            .atmosphere { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
-            .fog {
-                position: absolute; border-radius: 50%; filter: blur(70px); opacity: .7;
-                animation: drift 16s ease-in-out infinite alternate;
-            }
-            .fog-a { width: 46vw; height: 46vw; left: -10%; top: 8%; background: rgba(255,255,255,.42); }
-            .fog-b { width: 38vw; height: 38vw; right: -8%; bottom: 0; background: rgba(200,240,0,.2); animation-delay: -5s; }
-            .trinket {
-                position: absolute; border: 2px solid var(--ink); background: var(--paper);
-                box-shadow: 7px 7px 0 var(--ink); animation: bob 6s ease-in-out infinite;
-            }
-            .t1 { width: 96px; height: 96px; left: 7%; top: 22%; transform: rotate(-9deg);
-                  background: radial-gradient(circle at 50% 45%, var(--accent) 0 18%, transparent 19%), var(--paper); }
-            .t2 { width: 70px; height: 70px; right: 10%; top: 26%; border-radius: 50%; background: var(--lime); }
-            .t3 { width: 120px; height: 44px; left: 14%; bottom: 12%;
-                  background: repeating-linear-gradient(-12deg, var(--ink) 0 6px, var(--paper) 6px 12px); }
-            @keyframes drift { from { transform: translate(0,0) scale(1);} to { transform: translate(28px,-20px) scale(1.06);} }
-            @keyframes bob { 0%,100% { transform: translateY(0) rotate(-9deg);} 50% { transform: translateY(-12px) rotate(-3deg);} }
-            .t2 { animation-name: bob2; }
-            @keyframes bob2 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-14px);} }
-
-            .shell {
-                position: relative; z-index: 1; min-height: 100vh;
-                display: grid; place-items: center; padding: 40px 20px;
-            }
-            .hero {
-                width: min(760px, 100%);
-                padding: clamp(28px, 5vw, 48px);
-                background: color-mix(in srgb, var(--paper) 84%, transparent);
-                backdrop-filter: blur(18px);
-                border: 2px solid var(--ink);
-                box-shadow: 12px 12px 0 rgba(18,20,15,.88);
-                animation: rise .75s cubic-bezier(.2,.8,.2,1) both;
-            }
-            @keyframes rise { from { opacity:0; transform: translateY(22px);} to { opacity:1; transform: none;} }
-            .brand {
-                font-family: var(--font-display);
-                font-size: clamp(3rem, 9vw, 5rem);
-                font-weight: 700; letter-spacing: -.045em; line-height: .92;
-                margin-bottom: 18px;
-            }
-            .headline {
-                font-family: var(--font-display);
-                font-size: clamp(1.45rem, 3.4vw, 2.1rem);
-                font-weight: 500; letter-spacing: -.02em; line-height: 1.15;
-                margin-bottom: 12px; max-width: 18ch;
-            }
-            .lead {
-                font-size: 1.05rem; line-height: 1.55; max-width: 42ch;
-                margin-bottom: 28px; color: #2a2f27;
-            }
-            .actions { display: flex; flex-wrap: wrap; gap: 12px; }
-            .btn {
-                display: inline-flex; align-items: center; justify-content: center;
-                padding: 13px 20px; border: 2px solid var(--ink); background: var(--paper);
-                color: var(--ink); text-decoration: none; font-family: var(--font-ui);
-                font-weight: 800; font-size: .95rem; transition: transform .15s, box-shadow .15s, background .15s;
-            }
-            .btn:hover { transform: translate(-2px,-2px); box-shadow: 4px 4px 0 var(--ink); }
-            .btn-primary { background: var(--accent); color: #fff7f5; }
-            .btn-primary:hover { background: #ff5238; }
-            .btn-lime { background: var(--lime); }
-            .meta {
-                margin-top: 28px; padding-top: 16px; border-top: 1px solid rgba(18,20,15,.15);
-                display: flex; flex-wrap: wrap; gap: 10px 18px;
-                font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-                color: #2a2f27;
-            }
-            .chip {
-                display: inline-flex; align-items: center; padding: 5px 9px;
-                border: 1.5px solid var(--ink); background: var(--field);
-            }
-            @media (max-width: 720px) {
-                .trinket { display: none; }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="atmosphere" aria-hidden="true">
-            <div class="fog fog-a"></div>
-            <div class="fog fog-b"></div>
-            <span class="trinket t1"></span>
-            <span class="trinket t2"></span>
-            <span class="trinket t3"></span>
-        </div>
-        <main class="shell">
-            <section class="hero">
-                <p class="brand">VideoGen</p>
-                <h1 class="headline">Снимай коротко. Говори громко.</h1>
-                <p class="lead">B2B-платформа для роликов: сценарий, голос, аватар и монтаж в одном пайплайне.</p>
-                <div class="actions">
-                    <a class="btn btn-primary" href="/dashboard">Кабинет клиента</a>
-                    <a class="btn btn-lime" href="/admin">Админка</a>
-                </div>
-                <div class="meta">
-                    <span class="chip">Сценарий</span>
-                    <span class="chip">Озвучка</span>
-                    <span class="chip">Аватар</span>
-                    <span class="chip">v1.0.0</span>
-                </div>
-            </section>
-        </main>
-    </body>
-    </html>
-    """
+    """Serve the public landing page."""
+    landing_path = os.path.join(frontend_landing_path, "index.html")
+    if os.path.exists(landing_path):
+        with open(landing_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return HTMLResponse(content="<h1>VideoGen</h1>", status_code=200)
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -292,6 +169,16 @@ async def client_dashboard():
         with open(client_path, "r", encoding="utf-8") as f:
             return f.read()
     return HTMLResponse(content="<h1>Dashboard not found</h1>", status_code=404)
+
+
+@app.get("/apply", response_class=HTMLResponse)
+async def apply_page():
+    """Serve the public campaign/blogger access-request form."""
+    apply_path = os.path.join(frontend_apply_path, "index.html")
+    if os.path.exists(apply_path):
+        with open(apply_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return HTMLResponse(content="<h1>Apply page not found</h1>", status_code=404)
 
 
 @app.get("/health")

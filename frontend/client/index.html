@@ -34,6 +34,25 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-block">Войти в студию</button>
                     <p id="login-error" class="error-message"></p>
+                    <p class="auth-switch">Нет аккаунта? <button type="button" id="show-register-btn" class="link-btn">Зарегистрироваться</button></p>
+                </form>
+
+                <form id="register-form" class="login-form" hidden>
+                    <div class="form-group">
+                        <label for="register-name">Имя</label>
+                        <input type="text" id="register-name" required placeholder="Как к вам обращаться">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-email">Email</label>
+                        <input type="email" id="register-email" required placeholder="you@studio.com" autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">Пароль</label>
+                        <input type="password" id="register-password" required minlength="8" placeholder="Минимум 8 символов" autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Создать аккаунт</button>
+                    <p id="register-error" class="error-message"></p>
+                    <p class="auth-switch">Уже есть аккаунт? <button type="button" id="show-login-btn" class="link-btn">Войти</button></p>
                 </form>
             </div>
         </div>
@@ -261,6 +280,18 @@
                                     </select>
                                     </div>
                                 </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="viral-kinetic">
+                                        Кинетические субтитры (следуют за спикером)
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="viral-volumetric">
+                                        Объёмный заголовок (хук)
+                                    </label>
+                                </div>
                                 <div class="form-actions">
                                     <button type="submit" class="btn btn-primary btn-large">Сделать вирусным</button>
                                 </div>
@@ -334,6 +365,18 @@
                                         <option value="5" selected>5</option>
                                     </select>
                                     </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="clips-kinetic">
+                                        Кинетические субтитры (следуют за спикером)
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="clips-volumetric">
+                                        Объёмный заголовок (хук)
+                                    </label>
                                 </div>
                                 <div class="form-actions">
                                     <button type="submit" class="btn btn-primary btn-large">Нарезать клипы</button>
@@ -431,6 +474,14 @@
                 <div id="page-profile" class="page">
                     <div class="profile-grid">
                         <section class="profile-panel">
+                            <p class="eyebrow">Токены</p>
+                            <h3>Купить токены</h3>
+                            <p id="payment-status-msg" class="hint" style="display:none;"></p>
+                            <div id="payment-packages" class="package-grid">
+                                <p class="hint">Загрузка пакетов…</p>
+                            </div>
+                        </section>
+                        <section class="profile-panel">
                             <p class="eyebrow">Аккаунт</p>
                             <h3>Статистика</h3>
                             <div class="stats-list">
@@ -483,12 +534,28 @@
                                         <button type="button" id="profile-upload-font-btn" class="btn btn-secondary">Загрузить</button>
                                         <p id="profile-font-msg" class="hint"></p>
                                     </div>
+
+                                    <div class="font-upload">
+                                        <span class="branding-label">Шрифт из своего почерка</span>
+                                        <p class="hint">Скачайте шаблон, впишите буквы от руки, сфотографируйте и загрузите фото — соберём приватный шрифт только для вас.</p>
+                                        <button type="button" id="handwriting-template-btn" class="btn btn-ghost">Скачать шаблон</button>
+                                        <input type="file" id="handwriting-photo-file" accept="image/*">
+                                        <button type="button" id="handwriting-build-btn" class="btn btn-secondary">Собрать шрифт из фото</button>
+                                        <p id="handwriting-font-msg" class="hint"></p>
+                                    </div>
                                 </div>
                                 <div class="branding-item">
                                     <span class="branding-label">Цвет</span>
                                     <span class="branding-value">
                                         <span id="profile-font-color-preview" class="color-preview"></span>
                                         <span id="profile-font-color">#FFFFFF</span>
+                                    </span>
+                                </div>
+                                <div class="branding-item">
+                                    <span class="branding-label">Цвет акцента слов</span>
+                                    <span class="branding-value">
+                                        <span id="profile-accent-color-preview" class="color-preview"></span>
+                                        <span id="profile-accent-color">#FFE500</span>
                                     </span>
                                 </div>
                             </div>

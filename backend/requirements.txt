@@ -33,6 +33,8 @@ ffmpeg-python==0.2.0
 Pillow==10.3.0
 yt-dlp[default]>=2025.11.12
 yt-dlp-ejs>=0.3.0
+opencv-python-headless==4.10.0.84
+fonttools==4.63.0
 
 # Utilities
 python-dotenv==1.0.1

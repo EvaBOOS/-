@@ -48,6 +48,22 @@ async function login(email, password) {
     return data;
 }
 
+async function registerAccount(fullName, email, password) {
+    const response = await fetch(`${API_BASE}/public/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name: fullName, email, password })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        const detail = data.detail;
+        throw new Error(typeof detail === 'string' ? detail : (detail?.[0]?.msg || 'Не удалось зарегистрироваться'));
+    }
+    authToken = data.access_token;
+    localStorage.setItem('client_token', authToken);
+    return data;
+}
+
 function logout() {
     authToken = null;
     currentClient = null;
@@ -89,6 +105,69 @@ function updateCreditsDisplay() {
     }
 }
 
+// Token packages / ЮKassa checkout
+async function loadPaymentPackages() {
+    const container = document.getElementById('payment-packages');
+    if (!container) return;
+    try {
+        const packages = await api('/client/payments/packages');
+        container.innerHTML = packages.map((p) => `
+            <div class="package-card">
+                <span class="package-label">${escapeHtml(p.label)}</span>
+                <span class="package-tokens">${p.tokens} токенов</span>
+                <span class="package-price">${Number(p.price_rub).toLocaleString('ru-RU')} ₽</span>
+                <button type="button" class="btn btn-secondary" data-package-id="${p.id}">Купить</button>
+            </div>
+        `).join('');
+        container.querySelectorAll('[data-package-id]').forEach((btn) => {
+            btn.addEventListener('click', () => buyPackage(btn.dataset.packageId, btn));
+        });
+    } catch (e) {
+        container.innerHTML = `<p class="hint">Не удалось загрузить пакеты: ${escapeHtml(e.message || String(e))}</p>`;
+    }
+}
+
+async function buyPackage(packageId, btn) {
+    if (btn) btn.disabled = true;
+    try {
+        const result = await api('/client/payments/create', {
+            method: 'POST',
+            body: JSON.stringify({ package_id: packageId })
+        });
+        window.location.href = result.confirmation_url;
+    } catch (e) {
+        alert('Не удалось начать оплату: ' + (e.message || String(e)));
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function checkPaymentReturn() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') !== 'return') return;
+
+    history.replaceState(null, '', window.location.pathname);
+    const msg = document.getElementById('payment-status-msg');
+    if (msg) {
+        msg.style.display = 'block';
+        msg.textContent = 'Проверяем оплату…';
+    }
+
+    const before = currentClient ? currentClient.credits_remaining : null;
+    for (let i = 0; i < 8; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+            const credits = await api('/client/credits');
+            if (currentClient) currentClient.credits_remaining = credits.credits_remaining;
+            updateCreditsDisplay();
+            if (before !== null && credits.credits_remaining !== before) {
+                if (msg) msg.textContent = 'Оплата прошла — токены начислены.';
+                return;
+            }
+        } catch (_) { /* ignore transient */ }
+    }
+    if (msg) msg.textContent = 'Если оплата прошла успешно, токены появятся в течение минуты.';
+}
+
 // Screen Navigation
 function showScreen(screenName) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -116,6 +195,7 @@ function showPage(pageName) {
         loadGenerations();
     } else if (pageName === 'profile') {
         loadProfile();
+        loadPaymentPackages();
     } else if (pageName === 'viral') {
         loadFontOptions(document.getElementById('viral-font'), true);
         applyViralPrefillFromRadar();
@@ -285,6 +365,8 @@ async function submitViralEdit(
     intensity = 'full',
     genre = 'default',
     hookVariants = 1,
+    kineticSubtitles = false,
+    volumetricHook = false,
 ) {
     const formData = new FormData();
     if (file) formData.append('file', file);
@@ -298,6 +380,8 @@ async function submitViralEdit(
     formData.append('intensity', intensity || 'full');
     formData.append('genre', genre || 'default');
     formData.append('hook_variants', String(hookVariants || 1));
+    formData.append('kinetic_subtitles', kineticSubtitles ? 'true' : 'false');
+    formData.append('volumetric_hook', volumetricHook ? 'true' : 'false');
     if (voiceoverText) formData.append('voiceover_text', voiceoverText);
     const headers = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -436,7 +520,7 @@ async function previewLibraryFont(font) {
     }
 }
 
-async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUrl = '', platform = 'auto') {
+async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUrl = '', platform = 'auto', kineticSubtitles = false, volumetricHook = false) {
     const formData = new FormData();
     if (file) formData.append('file', file);
     if (sourceUrl) formData.append('source_url', sourceUrl);
@@ -444,6 +528,8 @@ async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUr
     formData.append('max_clips', String(maxClips));
     formData.append('font_id', fontId || '');
     formData.append('platform', platform || 'auto');
+    formData.append('kinetic_subtitles', kineticSubtitles ? 'true' : 'false');
+    formData.append('volumetric_hook', volumetricHook ? 'true' : 'false');
 
     const headers = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -761,7 +847,11 @@ async function loadProfile() {
         document.getElementById('profile-font').textContent = branding.subtitle_font_name;
         document.getElementById('profile-font-color').textContent = branding.subtitle_font_color;
         document.getElementById('profile-font-color-preview').style.backgroundColor = branding.subtitle_font_color;
-        
+
+        const accentColor = branding.subtitle_accent_color || '#FFE500';
+        document.getElementById('profile-accent-color').textContent = accentColor;
+        document.getElementById('profile-accent-color-preview').style.backgroundColor = accentColor;
+
         if (branding.watermark_path) {
             document.getElementById('profile-watermark').innerHTML = 
                 `<img src="/media/uploads/watermarks/${branding.watermark_path.split('/').pop()}" alt="Logo">`;
@@ -1103,15 +1193,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadFontOptions(document.getElementById('profile-font-select'), false);
         loadFontOptions(document.getElementById('viral-font'), true);
         loadFontOptions(document.getElementById('clips-font'), true);
+        checkPaymentReturn();
     }
-    
+
     // Login form
     document.getElementById('login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
         const errorEl = document.getElementById('login-error');
-        
+
         try {
             await login(email, password);
             const isClient = await checkAuth();
@@ -1128,7 +1219,40 @@ document.addEventListener('DOMContentLoaded', async () => {
             errorEl.textContent = e.message;
         }
     });
-    
+
+    // Register / login toggle
+    document.getElementById('show-register-btn')?.addEventListener('click', () => {
+        document.getElementById('login-form').hidden = true;
+        document.getElementById('register-form').hidden = false;
+    });
+    document.getElementById('show-login-btn')?.addEventListener('click', () => {
+        document.getElementById('register-form').hidden = true;
+        document.getElementById('login-form').hidden = false;
+    });
+
+    // Register form
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fullName = document.getElementById('register-name').value;
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+        const errorEl = document.getElementById('register-error');
+
+        try {
+            await registerAccount(fullName, email, password);
+            const isClient = await checkAuth();
+            if (isClient) {
+                showScreen('dashboard');
+                showPage('generate');
+                loadFontOptions(document.getElementById('profile-font-select'), false);
+                loadFontOptions(document.getElementById('viral-font'), true);
+                loadFontOptions(document.getElementById('clips-font'), true);
+            }
+        } catch (e) {
+            errorEl.textContent = e.message;
+        }
+    });
+
     // Logout
     document.getElementById('logout-btn').addEventListener('click', logout);
 
@@ -1212,6 +1336,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const intensity = document.getElementById('viral-intensity')?.value || 'full';
         const genre = document.getElementById('viral-genre')?.value || 'default';
         const hookVariants = parseInt(document.getElementById('viral-hooks')?.value || '1', 10);
+        const kineticSubtitles = document.getElementById('viral-kinetic')?.checked || false;
+        const volumetricHook = document.getElementById('viral-volumetric')?.checked || false;
 
         if (!file && !sourceUrl) {
             errorEl.textContent = 'Выберите видеофайл или вставьте ссылку';
@@ -1243,6 +1369,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 intensity,
                 genre,
                 hookVariants,
+                kineticSubtitles,
+                volumetricHook,
             );
             currentClient.credits_remaining--;
             updateCreditsDisplay();
@@ -1278,6 +1406,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const maxClips = parseInt(document.getElementById('clips-max')?.value || '5', 10);
         const fontId = document.getElementById('clips-font')?.value || '';
         const platform = document.getElementById('clips-platform')?.value || 'auto';
+        const kineticSubtitles = document.getElementById('clips-kinetic')?.checked || false;
+        const volumetricHook = document.getElementById('clips-volumetric')?.checked || false;
 
         if (!file && !sourceUrl) {
             errorEl.textContent = 'Выберите видеофайл или вставьте ссылку';
@@ -1296,7 +1426,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (submitBtn) submitBtn.disabled = true;
 
         try {
-            const gen = await submitAiClips(file || null, language, maxClips, fontId, sourceUrl, platform);
+            const gen = await submitAiClips(file || null, language, maxClips, fontId, sourceUrl, platform, kineticSubtitles, volumetricHook);
             currentClient.credits_remaining--;
             updateCreditsDisplay();
             fileInput.value = '';
@@ -1384,6 +1514,52 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('profile-font-file').value = '';
         } catch (err) {
             if (msg) msg.textContent = err.message;
+        }
+    });
+
+    document.getElementById('handwriting-template-btn')?.addEventListener('click', async () => {
+        try {
+            const response = await fetch(`${API_BASE}/client/branding/handwriting-template`, {
+                headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+            });
+            if (!response.ok) throw new Error('Не удалось скачать шаблон');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'videogen-handwriting-template.png';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert(err.message || String(err));
+        }
+    });
+
+    document.getElementById('handwriting-build-btn')?.addEventListener('click', async () => {
+        const msg = document.getElementById('handwriting-font-msg');
+        const file = document.getElementById('handwriting-photo-file')?.files?.[0];
+        if (!file) {
+            if (msg) msg.textContent = 'Выберите фото заполненного шаблона';
+            return;
+        }
+        if (msg) msg.textContent = 'Собираем шрифт…';
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            const headers = {};
+            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            const res = await fetch(`${API_BASE}/client/branding/handwriting-font`, {
+                method: 'POST', headers, body: form,
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Ошибка сборки шрифта');
+            if (msg) msg.textContent = `Готово: ${data.family}`;
+            document.getElementById('profile-font').textContent = data.family;
+            document.getElementById('handwriting-photo-file').value = '';
+        } catch (err) {
+            if (msg) msg.textContent = err.message || String(err);
         }
     });
 

@@ -401,6 +401,8 @@ input[type="color"]::-webkit-color-swatch { border: 1px solid var(--ink); }
 }
 .action-btn-edit { background: var(--accent); color: white; }
 .action-btn-edit:hover { background: #ff5238; }
+.action-btn-danger { background: #ffb4a8; color: var(--ink); }
+.action-btn-danger:hover { background: #ff9686; }
 
 @media (max-width: 900px) {
     #dashboard-screen.screen.active { flex-direction: column; }
