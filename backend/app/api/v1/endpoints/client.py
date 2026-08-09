@@ -132,6 +132,21 @@ async def get_profile(
     return client
 
 
+@router.post("/deactivate")
+async def deactivate_account(
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Self-service account deactivation. Flips the same `is_active` flag
+    an admin can already toggle via PATCH /admin/clients/{id} — locks out
+    every route depending on get_current_client, but keeps the account and
+    its data intact and reversible by an admin. Full data/file erasure
+    ("right to be forgotten") is separate, larger scope, not this route."""
+    client.is_active = False
+    await db.commit()
+    return {"message": "Аккаунт деактивирован"}
+
+
 @router.get("/branding", response_model=ClientBrandingResponse)
 async def get_branding(
     client: Client = Depends(get_current_client),
@@ -183,7 +198,10 @@ async def create_generation(
 
     genre_norm = normalize_genre(generation_data.genre)
     product_url = (generation_data.product_url or "").strip()
-    api_meta = {"genre": genre_norm}
+    # This mode is 100% synthesized (LLM script + TTS voice + AI avatar) --
+    # there's no "non-AI" variant of it, so the disclosure flag is always on,
+    # unlike viral-edit/clips where it reflects the user's own choice.
+    api_meta = {"genre": genre_norm, "ai_disclosure_requested": True}
     if product_url:
         try:
             api_meta["product_url"] = _validate_url(product_url)
@@ -232,6 +250,8 @@ async def create_viral_edit(
     music_mode: str = Form("auto"),
     kinetic_subtitles: bool = Form(False),
     volumetric_hook: bool = Form(False),
+    rights_confirmed: bool = Form(False),
+    ai_disclosure_requested: bool = Form(False),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
@@ -247,6 +267,11 @@ async def create_viral_edit(
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="No credits remaining. Please contact admin to add more credits.",
+        )
+    if not rights_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Подтвердите, что у вас есть права на загружаемый материал",
         )
 
     from app.services.video.edit_styles import VALID_STYLES
@@ -310,6 +335,8 @@ async def create_viral_edit(
             "music_mode": music_mode_norm,
             "kinetic_subtitles": bool(kinetic_subtitles),
             "volumetric_hook": bool(volumetric_hook),
+            "rights_confirmed": bool(rights_confirmed),
+            "ai_disclosure_requested": bool(ai_disclosure_requested),
         },
     )
     db.add(generation)
@@ -337,6 +364,8 @@ async def create_ai_clips(
     platform: str = Form("auto"),
     kinetic_subtitles: bool = Form(False),
     volumetric_hook: bool = Form(False),
+    rights_confirmed: bool = Form(False),
+    ai_disclosure_requested: bool = Form(False),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
@@ -348,6 +377,11 @@ async def create_ai_clips(
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="No credits remaining. Please contact admin to add more credits.",
+        )
+    if not rights_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Подтвердите, что у вас есть права на загружаемый материал",
         )
 
     from app.services.video.content_presets import normalize_platform
@@ -378,6 +412,8 @@ async def create_ai_clips(
             "platform": platform_norm,
             "kinetic_subtitles": bool(kinetic_subtitles),
             "volumetric_hook": bool(volumetric_hook),
+            "rights_confirmed": bool(rights_confirmed),
+            "ai_disclosure_requested": bool(ai_disclosure_requested),
         },
     )
     db.add(generation)

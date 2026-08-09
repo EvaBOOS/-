@@ -167,3 +167,33 @@ body {
 }
 
 #apply-form.hidden { display: none; }
+
+.consent-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-weight: 400;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.consent-label input[type="checkbox"] {
+    width: auto;
+    margin-top: 2px;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+}
+
+.consent-label a { color: var(--ink); }
+
+.apply-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 18px;
+    margin-top: 20px;
+    font-size: 0.78rem;
+}
+
+.apply-footer a { color: var(--ink-soft); }

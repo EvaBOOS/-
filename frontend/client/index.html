@@ -50,10 +50,28 @@
                         <label for="register-password">Пароль</label>
                         <input type="password" id="register-password" required minlength="8" placeholder="Минимум 8 символов" autocomplete="new-password">
                     </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="register-terms" required>
+                            Принимаю <a href="/legal/terms" target="_blank" rel="noopener">Пользовательское соглашение</a> и <a href="/legal/privacy" target="_blank" rel="noopener">Политику обработки персональных данных</a>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="register-marketing">
+                            Хочу получать информационные и рекламные сообщения
+                        </label>
+                    </div>
                     <button type="submit" class="btn btn-primary btn-block">Создать аккаунт</button>
                     <p id="register-error" class="error-message"></p>
                     <p class="auth-switch">Уже есть аккаунт? <button type="button" id="show-login-btn" class="link-btn">Войти</button></p>
                 </form>
+
+                <footer class="login-footer">
+                    <a href="/legal/terms">Пользовательское соглашение</a>
+                    <a href="/legal/privacy">Политика ПДн</a>
+                    <a href="/legal">Все документы</a>
+                </footer>
             </div>
         </div>
 
@@ -292,6 +310,18 @@
                                         Объёмный заголовок (хук)
                                     </label>
                                 </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="viral-rights" required>
+                                        Подтверждаю наличие прав на загружаемый материал
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="viral-ai-disclosure">
+                                        Отметить ролик как созданный с помощью ИИ
+                                    </label>
+                                </div>
                                 <div class="form-actions">
                                     <button type="submit" class="btn btn-primary btn-large">Сделать вирусным</button>
                                 </div>
@@ -376,6 +406,18 @@
                                     <label class="checkbox-label">
                                         <input type="checkbox" id="clips-volumetric">
                                         Объёмный заголовок (хук)
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="clips-rights" required>
+                                        Подтверждаю наличие прав на загружаемый материал
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="clips-ai-disclosure">
+                                        Отметить клипы как созданные с помощью ИИ
                                     </label>
                                 </div>
                                 <div class="form-actions">
@@ -561,6 +603,26 @@
                             </div>
                             <p class="hint">Брендинг меняет администратор.</p>
                         </section>
+                        <section class="profile-panel">
+                            <p class="eyebrow">Аккаунт</p>
+                            <h3>Приватность</h3>
+                            <div class="branding-info">
+                                <div class="branding-item">
+                                    <span class="branding-label">Согласие на обработку ПДн</span>
+                                    <span class="branding-value" id="profile-terms-status">—</span>
+                                </div>
+                                <div class="branding-item">
+                                    <span class="branding-label">Рекламные сообщения</span>
+                                    <span class="branding-value" id="profile-marketing-status">—</span>
+                                </div>
+                            </div>
+                            <p class="hint">
+                                <a href="/legal/privacy" target="_blank" rel="noopener">Политика обработки персональных данных</a> ·
+                                <a href="/legal/terms" target="_blank" rel="noopener">Пользовательское соглашение</a>
+                            </p>
+                            <button type="button" id="deactivate-account-btn" class="btn btn-ghost">Деактивировать аккаунт</button>
+                            <p id="deactivate-msg" class="hint"></p>
+                        </section>
                     </div>
                 </div>
 
@@ -573,6 +635,7 @@
                         <div class="modal-body">
                             <div class="generation-status">
                                 <div class="status-badge" id="modal-status">Статус</div>
+                                <span class="status-badge" id="modal-ai-badge" style="display:none; background:var(--field);">Маркировка ИИ запрошена</span>
                                 <div class="progress-bar"><div class="progress-fill" id="modal-progress"></div></div>
                                 <span class="progress-text" id="modal-progress-text">0%</span>
                             </div>
@@ -623,5 +686,6 @@
         </div>
     </div>
     <script src="/dashboard/static/js/client.js"></script>
+    <script src="/legal/static/js/cookie-consent.js" defer></script>
 </body>
 </html>

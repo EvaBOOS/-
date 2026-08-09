@@ -1,7 +1,7 @@
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +31,13 @@ async def submit_application(
     """Public, unauthenticated endpoint — a company or blogger requests
     access to the B2B/campaign cabinet. An admin reviews it later via
     GET/POST /admin/applications."""
-    application = ClientApplication(**application_data.model_dump())
+    if not application_data.accepted_terms:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Необходимо принять условия обработки персональных данных",
+        )
+    data = application_data.model_dump(exclude={"accepted_terms"})
+    application = ClientApplication(**data, terms_accepted_at=datetime.utcnow())
     db.add(application)
     await db.commit()
     await db.refresh(application)
@@ -46,6 +52,11 @@ async def register(
     """Self-serve signup — instantly provisions a Client (no admin review)
     with a small free-trial token balance, and logs the new account in
     immediately so the frontend can go straight to the dashboard."""
+    if not register_data.accepted_terms:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Необходимо принять пользовательское соглашение и политику обработки персональных данных",
+        )
     client = await provision_client(
         db,
         user_email=register_data.email,
@@ -57,6 +68,10 @@ async def register(
         subscription_plan=SubscriptionPlan.BASIC,
         initial_credits=settings.SELF_SERVE_FREE_CREDITS,
     )
+    client.terms_accepted_at = datetime.utcnow()
+    client.marketing_opt_in = register_data.marketing_opt_in
+    await db.commit()
+    await db.refresh(client)
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(

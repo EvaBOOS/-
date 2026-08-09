@@ -127,6 +127,7 @@ frontend_admin_path = os.path.join(_frontend_root, "admin")
 frontend_client_path = os.path.join(_frontend_root, "client")
 frontend_apply_path = os.path.join(_frontend_root, "apply")
 frontend_landing_path = os.path.join(_frontend_root, "landing")
+frontend_legal_path = os.path.join(_frontend_root, "legal")
 
 if os.path.exists(frontend_admin_path):
     app.mount("/admin/static", StaticFiles(directory=os.path.join(frontend_admin_path, "static")), name="admin_static")
@@ -139,6 +140,20 @@ if os.path.exists(frontend_apply_path):
 
 if os.path.exists(frontend_landing_path):
     app.mount("/landing/static", StaticFiles(directory=os.path.join(frontend_landing_path, "static")), name="landing_static")
+
+if os.path.exists(frontend_legal_path):
+    app.mount("/legal/static", StaticFiles(directory=os.path.join(frontend_legal_path, "static")), name="legal_static")
+
+# Draft compliance-doc pages (see frontend/legal/) — placeholders, not final
+# legal text; each doc_id maps to a static file served through the explicit
+# route below, same convention as /admin, /dashboard, /apply.
+_LEGAL_DOCS = {
+    "terms": "terms.html",
+    "privacy": "privacy.html",
+    "cookies": "cookies.html",
+    "refunds": "refunds.html",
+    "ai-disclosure": "ai-disclosure.html",
+}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -179,6 +194,29 @@ async def apply_page():
         with open(apply_path, "r", encoding="utf-8") as f:
             return f.read()
     return HTMLResponse(content="<h1>Apply page not found</h1>", status_code=404)
+
+
+@app.get("/legal", response_class=HTMLResponse)
+async def legal_hub():
+    """Serve the compliance-docs hub page (draft placeholders)."""
+    hub_path = os.path.join(frontend_legal_path, "index.html")
+    if os.path.exists(hub_path):
+        with open(hub_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return HTMLResponse(content="<h1>Legal hub not found</h1>", status_code=404)
+
+
+@app.get("/legal/{doc_id}", response_class=HTMLResponse)
+async def legal_doc(doc_id: str):
+    """Serve one draft compliance document by id (see _LEGAL_DOCS)."""
+    filename = _LEGAL_DOCS.get(doc_id)
+    if not filename:
+        return HTMLResponse(content="<h1>Document not found</h1>", status_code=404)
+    doc_path = os.path.join(frontend_legal_path, "docs", filename)
+    if os.path.exists(doc_path):
+        with open(doc_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return HTMLResponse(content="<h1>Document not found</h1>", status_code=404)
 
 
 @app.get("/health")

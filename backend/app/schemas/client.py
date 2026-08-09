@@ -89,6 +89,8 @@ class ClientResponse(ClientBase):
     credits_used_this_month: int
     billing_cycle_start: datetime
     is_active: bool
+    terms_accepted_at: Optional[datetime] = None
+    marketing_opt_in: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -113,6 +115,7 @@ class ClientApplicationCreate(BaseModel):
     company_name: Optional[str] = None
     portfolio_url: Optional[str] = None
     message: Optional[str] = None
+    accepted_terms: bool = False
 
 
 class ClientApplicationResponse(BaseModel):
@@ -128,6 +131,7 @@ class ClientApplicationResponse(BaseModel):
     admin_note: Optional[str] = None
     created_at: datetime
     reviewed_at: Optional[datetime] = None
+    terms_accepted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -149,3 +153,5 @@ class PublicRegisterRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=255)
     email: str
     password: str = Field(..., min_length=8)
+    accepted_terms: bool = False
+    marketing_opt_in: bool = False

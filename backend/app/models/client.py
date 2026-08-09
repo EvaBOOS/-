@@ -57,6 +57,14 @@ class Client(Base):
     custom_voice_clone_id = Column(String(100), nullable=True)
     
     is_active = Column(Boolean, default=True)
+
+    # Compliance: consent captured at self-serve registration (152-ФЗ /
+    # ToS acceptance). Null terms_accepted_at means the row predates this
+    # column or was provisioned through the admin approve-flow, which has
+    # no consent UI of its own.
+    terms_accepted_at = Column(DateTime(timezone=True), nullable=True)
+    marketing_opt_in = Column(Boolean, default=False)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -127,6 +135,7 @@ class ClientApplication(Base):
     company_name = Column(String(255), nullable=True)
     portfolio_url = Column(String(500), nullable=True)
     message = Column(Text, nullable=True)
+    terms_accepted_at = Column(DateTime(timezone=True), nullable=True)
 
     status = Column(SQLEnum(ApplicationStatus, native_enum=False), default=ApplicationStatus.PENDING, nullable=False)
     admin_note = Column(Text, nullable=True)

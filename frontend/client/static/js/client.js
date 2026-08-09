@@ -48,11 +48,17 @@ async function login(email, password) {
     return data;
 }
 
-async function registerAccount(fullName, email, password) {
+async function registerAccount(fullName, email, password, acceptedTerms, marketingOptIn) {
     const response = await fetch(`${API_BASE}/public/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName, email, password })
+        body: JSON.stringify({
+            full_name: fullName,
+            email,
+            password,
+            accepted_terms: acceptedTerms,
+            marketing_opt_in: marketingOptIn
+        })
     });
     const data = await response.json();
     if (!response.ok) {
@@ -367,6 +373,8 @@ async function submitViralEdit(
     hookVariants = 1,
     kineticSubtitles = false,
     volumetricHook = false,
+    rightsConfirmed = false,
+    aiDisclosureRequested = false,
 ) {
     const formData = new FormData();
     if (file) formData.append('file', file);
@@ -382,6 +390,8 @@ async function submitViralEdit(
     formData.append('hook_variants', String(hookVariants || 1));
     formData.append('kinetic_subtitles', kineticSubtitles ? 'true' : 'false');
     formData.append('volumetric_hook', volumetricHook ? 'true' : 'false');
+    formData.append('rights_confirmed', rightsConfirmed ? 'true' : 'false');
+    formData.append('ai_disclosure_requested', aiDisclosureRequested ? 'true' : 'false');
     if (voiceoverText) formData.append('voiceover_text', voiceoverText);
     const headers = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -520,7 +530,7 @@ async function previewLibraryFont(font) {
     }
 }
 
-async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUrl = '', platform = 'auto', kineticSubtitles = false, volumetricHook = false) {
+async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUrl = '', platform = 'auto', kineticSubtitles = false, volumetricHook = false, rightsConfirmed = false, aiDisclosureRequested = false) {
     const formData = new FormData();
     if (file) formData.append('file', file);
     if (sourceUrl) formData.append('source_url', sourceUrl);
@@ -530,6 +540,8 @@ async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUr
     formData.append('platform', platform || 'auto');
     formData.append('kinetic_subtitles', kineticSubtitles ? 'true' : 'false');
     formData.append('volumetric_hook', volumetricHook ? 'true' : 'false');
+    formData.append('rights_confirmed', rightsConfirmed ? 'true' : 'false');
+    formData.append('ai_disclosure_requested', aiDisclosureRequested ? 'true' : 'false');
 
     const headers = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -577,7 +589,10 @@ function renderGenerationModal(gen) {
     document.getElementById('modal-status').className = `status-badge status-${gen.status}`;
     document.getElementById('modal-progress').style.width = `${gen.progress_percent}%`;
     document.getElementById('modal-progress-text').textContent = `${gen.progress_percent}%`;
-    
+
+    const aiBadge = document.getElementById('modal-ai-badge');
+    if (aiBadge) aiBadge.style.display = gen.api_responses?.ai_disclosure_requested === true ? 'inline-block' : 'none';
+
     document.getElementById('modal-original-text').textContent = gen.original_text;
 
     const viralitySection = document.getElementById('virality-section');
@@ -851,6 +866,17 @@ async function loadProfile() {
         const accentColor = branding.subtitle_accent_color || '#FFE500';
         document.getElementById('profile-accent-color').textContent = accentColor;
         document.getElementById('profile-accent-color-preview').style.backgroundColor = accentColor;
+
+        const termsEl = document.getElementById('profile-terms-status');
+        if (termsEl) {
+            termsEl.textContent = client.terms_accepted_at
+                ? `Принято ${formatDate(client.terms_accepted_at)}`
+                : 'Не зафиксировано';
+        }
+        const marketingEl = document.getElementById('profile-marketing-status');
+        if (marketingEl) {
+            marketingEl.textContent = client.marketing_opt_in ? 'Да' : 'Нет';
+        }
 
         if (branding.watermark_path) {
             document.getElementById('profile-watermark').innerHTML = 
@@ -1236,10 +1262,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const fullName = document.getElementById('register-name').value;
         const email = document.getElementById('register-email').value;
         const password = document.getElementById('register-password').value;
+        const acceptedTerms = document.getElementById('register-terms').checked;
+        const marketingOptIn = document.getElementById('register-marketing').checked;
         const errorEl = document.getElementById('register-error');
 
         try {
-            await registerAccount(fullName, email, password);
+            await registerAccount(fullName, email, password, acceptedTerms, marketingOptIn);
             const isClient = await checkAuth();
             if (isClient) {
                 showScreen('dashboard');
@@ -1255,6 +1283,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Logout
     document.getElementById('logout-btn').addEventListener('click', logout);
+
+    document.getElementById('deactivate-account-btn')?.addEventListener('click', async () => {
+        const msgEl = document.getElementById('deactivate-msg');
+        if (!window.confirm('Деактивировать аккаунт? Доступ к кабинету будет закрыт; данные сохранятся и восстановление возможно через администратора.')) {
+            return;
+        }
+        try {
+            await api('/client/deactivate', { method: 'POST' });
+            logout();
+        } catch (e) {
+            if (msgEl) msgEl.textContent = 'Ошибка: ' + e.message;
+        }
+    });
 
     document.getElementById('radar-refresh-btn')?.addEventListener('click', () => loadRadarTrends(true));
     document.getElementById('radar-analyze-btn')?.addEventListener('click', async () => {
@@ -1338,6 +1379,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const hookVariants = parseInt(document.getElementById('viral-hooks')?.value || '1', 10);
         const kineticSubtitles = document.getElementById('viral-kinetic')?.checked || false;
         const volumetricHook = document.getElementById('viral-volumetric')?.checked || false;
+        const rightsConfirmed = document.getElementById('viral-rights')?.checked || false;
+        const aiDisclosureRequested = document.getElementById('viral-ai-disclosure')?.checked || false;
 
         if (!file && !sourceUrl) {
             errorEl.textContent = 'Выберите видеофайл или вставьте ссылку';
@@ -1371,6 +1414,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 hookVariants,
                 kineticSubtitles,
                 volumetricHook,
+                rightsConfirmed,
+                aiDisclosureRequested,
             );
             currentClient.credits_remaining--;
             updateCreditsDisplay();
@@ -1408,6 +1453,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const platform = document.getElementById('clips-platform')?.value || 'auto';
         const kineticSubtitles = document.getElementById('clips-kinetic')?.checked || false;
         const volumetricHook = document.getElementById('clips-volumetric')?.checked || false;
+        const rightsConfirmed = document.getElementById('clips-rights')?.checked || false;
+        const aiDisclosureRequested = document.getElementById('clips-ai-disclosure')?.checked || false;
 
         if (!file && !sourceUrl) {
             errorEl.textContent = 'Выберите видеофайл или вставьте ссылку';
@@ -1426,7 +1473,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (submitBtn) submitBtn.disabled = true;
 
         try {
-            const gen = await submitAiClips(file || null, language, maxClips, fontId, sourceUrl, platform, kineticSubtitles, volumetricHook);
+            const gen = await submitAiClips(file || null, language, maxClips, fontId, sourceUrl, platform, kineticSubtitles, volumetricHook, rightsConfirmed, aiDisclosureRequested);
             currentClient.credits_remaining--;
             updateCreditsDisplay();
             fileInput.value = '';

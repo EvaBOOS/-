@@ -30,7 +30,8 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
         account_type: accountType,
         company_name: accountType === 'company' ? companyOrSocial : null,
         portfolio_url: accountType === 'blogger' ? companyOrSocial : null,
-        message: document.getElementById('message').value || null
+        message: document.getElementById('message').value || null,
+        accepted_terms: document.getElementById('accepted-terms').checked
     };
 
     try {
