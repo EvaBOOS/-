@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from contextlib import asynccontextmanager
 import os
 
@@ -154,6 +154,32 @@ _LEGAL_DOCS = {
     "refunds": "refunds.html",
     "ai-disclosure": "ai-disclosure.html",
 }
+
+
+def _favicon_path(filename: str = "favicon.png") -> str:
+    return os.path.join(frontend_landing_path, "static", "img", filename)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicon.png", include_in_schema=False)
+async def favicon():
+    """Browser tab emblem — LoudCut cat mark."""
+    path = _favicon_path("favicon-32.png")
+    if not os.path.exists(path):
+        path = _favicon_path("favicon.png")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/png")
+    return JSONResponse(status_code=404, content={"detail": "favicon not found"})
+
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+async def apple_touch_icon():
+    path = _favicon_path("apple-touch-icon.png")
+    if not os.path.exists(path):
+        path = _favicon_path("favicon.png")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/png")
+    return JSONResponse(status_code=404, content={"detail": "icon not found"})
 
 
 @app.get("/", response_class=HTMLResponse)
