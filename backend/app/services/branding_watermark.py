@@ -110,10 +110,13 @@ def _write_text_watermark_png(path: str, text: str = "VIDEOGEN") -> None:
 
 
 def platform_watermark_path() -> str:
-    """Generate/cache a VideoGen PNG mark under assets/branding."""
+    """Generate/cache a LoudCut PNG mark under assets/branding."""
     out_dir = os.path.join(_assets_root(), "branding")
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "videogen_watermark.png")
+    # Renamed from videogen_watermark.png (LoudCut rebrand, 2026-08-13) so a
+    # stale pre-rebrand PNG already cached on disk gets regenerated instead
+    # of silently continuing to serve the old "VideoGen" mark forever.
+    path = os.path.join(out_dir, "loudcut_watermark.png")
     if os.path.isfile(path) and os.path.getsize(path) > 400:
         return path
 
@@ -128,21 +131,21 @@ def platform_watermark_path() -> str:
             font = ImageFont.truetype("arial.ttf", 54)
         except OSError:
             font = ImageFont.load_default()
-        text = "VideoGen"
+        text = "LoudCut"
         bbox = draw.textbbox((0, 0), text, font=font)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
         draw.text(((w - tw) / 2, (h - th) / 2 - 4), text, fill=(255, 255, 255, 235), font=font)
         img.save(path, "PNG")
         return path
     except Exception:
-        _write_text_watermark_png(path, "VIDEOGEN")
+        _write_text_watermark_png(path, "LOUDCUT")
         return path
 
 
 def resolve_export_watermark(client: Client) -> Optional[Dict[str, Any]]:
     """
-    Basic: always watermark (brand logo if set, else VideoGen mark).
-    Standard: brand if set, else light VideoGen mark.
+    Basic: always watermark (brand logo if set, else LoudCut mark).
+    Standard: brand if set, else light LoudCut mark.
     Premium: brand only; clean export if no logo uploaded.
     """
     branding = getattr(client, "branding", None)
@@ -187,12 +190,12 @@ def plan_watermark_policy(plan: SubscriptionPlan | str) -> Dict[str, str]:
     policies = {
         "basic": {
             "label": "Basic",
-            "watermark": "Всегда VideoGen или ваш логотип",
+            "watermark": "Всегда LoudCut или ваш логотип",
             "clean_export": "нет",
         },
         "standard": {
             "label": "Standard",
-            "watermark": "Ваш логотип или лёгкий VideoGen",
+            "watermark": "Ваш логотип или лёгкий LoudCut",
             "clean_export": "нет",
         },
         "premium": {

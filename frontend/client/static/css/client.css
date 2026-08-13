@@ -227,6 +227,64 @@ body {
     transform: rotate(45deg);
 }
 
+/* ---------- toggle switch (viral/clips checkboxes) ---------- */
+.toggle-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer;
+}
+.toggle-row:last-of-type { border-bottom: 1px solid var(--line); }
+.toggle-row span:first-child { font-weight: 700; font-size: 0.92rem; }
+.toggle-switch { position: relative; display: inline-block; width: 46px; height: 26px; flex: none; }
+.toggle-switch input {
+    position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; z-index: 1;
+}
+.toggle-switch .knob { position: absolute; inset: 0; border: 2px solid var(--ink); background: var(--field); pointer-events: none; }
+.toggle-switch .knob::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    background: var(--paper); border: 1.5px solid var(--ink); transition: transform 0.2s ease;
+}
+.toggle-switch input:checked ~ .knob { background: var(--lime); }
+.toggle-switch input:checked ~ .knob::after { transform: translateX(18px); }
+.toggle-switch input:focus-visible ~ .knob { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- preset card grid (genre picker) ---------- */
+.preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.preset-card {
+    border: 2px solid var(--ink); background: var(--paper); padding: 10px 8px; text-align: center; cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.preset-card:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+.preset-card.is-active { background: var(--lime); box-shadow: 3px 3px 0 var(--ink); }
+.preset-card span { font-size: 0.76rem; font-weight: 700; }
+.preset-card .mark-scribble { display: block; margin: 0 auto 4px; }
+
+.mark-scribble { width: 20px; height: 20px; overflow: visible; flex: none; }
+.mark-scribble path { fill: none; stroke: currentColor; stroke-width: 14; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- video dropzone (viral/clips file input) ---------- */
+.dropzone {
+    display: block; border: 2px dashed var(--ink); background: var(--field);
+    padding: 22px 16px; text-align: center; cursor: pointer;
+    position: relative; overflow: hidden; transition: background 0.15s ease, border-color 0.15s ease;
+}
+.dropzone:hover, .dropzone.is-dragover { background: var(--paper); border-color: var(--accent); }
+.dropzone:has(input:focus-visible) { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.dropzone input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.dropzone .sweep {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%);
+    transform: translateX(-120%);
+}
+.dropzone:hover .sweep, .dropzone:focus-within .sweep { animation: dropzone-sweep 1s ease; }
+@keyframes dropzone-sweep { to { transform: translateX(120%); } }
+.dropzone strong { display: block; font-size: 0.92rem; margin-bottom: 4px; }
+.dropzone span:not(.sweep) { font-size: 0.78rem; color: var(--ink-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+    .dropzone:hover .sweep, .dropzone:focus-within .sweep { animation: none; }
+    .toggle-switch .knob::after { transition: none; }
+}
+
 .auth-switch {
     margin-top: 16px;
     font-size: 0.85rem;

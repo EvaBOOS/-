@@ -80,7 +80,7 @@ async def generate_template_image() -> bytes:
     body_font = await _load_cyrillic_font(20)
     label_font = await _load_cyrillic_font(22)
 
-    draw.text((GRID_MARGIN_X, 45), "VideoGen — шаблон почерка", fill="black", font=title_font)
+    draw.text((GRID_MARGIN_X, 45), "LoudCut — шаблон почерка", fill="black", font=title_font)
     draw.text(
         (GRID_MARGIN_X, 85),
         "Впишите каждую букву/цифру в свою клетку чёрным маркером или ручкой.",

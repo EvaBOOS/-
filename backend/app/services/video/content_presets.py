@@ -52,7 +52,7 @@ PLATFORM_PRESETS: Dict[str, Dict[str, Any]] = {
 INTENSITY_PRESETS: Dict[str, Dict[str, Any]] = {
     "full": {
         "label": "Полный монтаж",
-        "hint": "Zooms, B-roll, stickers, hook, music — full VideoGen stack.",
+        "hint": "Zooms, B-roll, stickers, hook, music — full LoudCut stack.",
     },
     "lite": {
         "label": "Лёгкий монтаж",

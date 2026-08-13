@@ -163,7 +163,7 @@ async def root():
     if os.path.exists(landing_path):
         with open(landing_path, "r", encoding="utf-8") as f:
             return f.read()
-    return HTMLResponse(content="<h1>VideoGen</h1>", status_code=200)
+    return HTMLResponse(content="<h1>LoudCut</h1>", status_code=200)
 
 
 @app.get("/admin", response_class=HTMLResponse)

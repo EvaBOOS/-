@@ -855,7 +855,7 @@ async function loadProfile() {
         const hintEl = document.getElementById('profile-plan-hint');
         if (hintEl) {
             hintEl.textContent = wp.watermark
-                ? `Watermark: ${wp.watermark}. Premium — чистое видео без VideoGen-знака.`
+                ? `Watermark: ${wp.watermark}. Premium — чистое видео без LoudCut-знака.`
                 : '';
         }
         
@@ -1210,8 +1210,85 @@ function enhanceCustomSelects(root = document) {
 }
 
 // Event Listeners
+// Enter/Space activates a div-based [role="button"] control (preset cards),
+// same as a native <button> would.
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target;
+    if (el?.getAttribute && el.getAttribute('role') === 'button') {
+        e.preventDefault();
+        el.click();
+    }
+});
+
+function wireDropzone(labelId, inputId, hintId) {
+    const label = document.getElementById(labelId);
+    const input = document.getElementById(inputId);
+    const hint = document.getElementById(hintId);
+    if (!label || !input) return;
+    const defaultHint = hint ? hint.textContent : '';
+
+    const updateHint = () => {
+        if (!hint) return;
+        const file = input.files?.[0];
+        hint.textContent = file ? file.name : defaultHint;
+    };
+    input.addEventListener('change', updateHint);
+
+    ['dragenter', 'dragover'].forEach((evt) => {
+        label.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            label.classList.add('is-dragover');
+        });
+    });
+    ['dragleave', 'drop'].forEach((evt) => {
+        label.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            label.classList.remove('is-dragover');
+        });
+    });
+    label.addEventListener('drop', (e) => {
+        const files = e.dataTransfer?.files;
+        if (files && files.length) {
+            input.files = files;
+            updateHint();
+        }
+    });
+}
+
+function wirePresetGrid(gridId, selectId) {
+    const grid = document.getElementById(gridId);
+    const select = document.getElementById(selectId);
+    if (!grid || !select) return;
+    grid.querySelectorAll('.preset-card').forEach((card) => {
+        card.addEventListener('click', () => {
+            grid.querySelectorAll('.preset-card').forEach((c) => c.classList.remove('is-active'));
+            card.classList.add('is-active');
+            select.value = card.dataset.value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
+}
+
+function initVideoUploadWidgets() {
+    wireDropzone('viral-dropzone', 'viral-file', 'viral-dropzone-hint');
+    wireDropzone('clips-dropzone', 'clips-file', 'clips-dropzone-hint');
+    wirePresetGrid('viral-genre-presets', 'viral-genre');
+
+    if (window.VGScribble) {
+        const marks = document.querySelectorAll('.mark-scribble');
+        marks.forEach((svg) => VGScribble.draw(svg, 50, 50, 40, 40));
+        setTimeout(() => {
+            marks.forEach((svg, i) => setTimeout(() => VGScribble.reveal(svg), i * 60));
+        }, 150);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     enhanceCustomSelects();
+    initVideoUploadWidgets();
     const isAuthenticated = await checkAuth();
     if (isAuthenticated) {
         showScreen('dashboard');

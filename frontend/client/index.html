@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VideoGen — кабинет</title>
+    <title>LoudCut — кабинет</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
@@ -20,7 +20,7 @@
                 <div class="fog fog-b"></div>
             </div>
             <div class="login-stage">
-                <p class="brand-mark">VideoGen</p>
+                <p class="brand-mark">LoudCut</p>
                 <h1 class="login-title">Снимай коротко.<br>Говори громко.</h1>
                 <p class="login-lead">Личный кабинет для генерации роликов со сценарием, голосом и аватаром.</p>
                 <form id="login-form" class="login-form">
@@ -78,7 +78,7 @@
         <div id="dashboard-screen" class="screen">
             <nav class="sidebar">
                 <div class="sidebar-header">
-                    <span class="logo-text">VideoGen</span>
+                    <span class="logo-text">LoudCut</span>
                     <span class="logo-tag">studio</span>
                 </div>
                 <ul class="nav-menu">
@@ -190,7 +190,12 @@
                             <form id="viral-form">
                                 <div class="form-group">
                                     <label for="viral-file">Видеофайл</label>
-                                    <input type="file" id="viral-file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv">
+                                    <label class="dropzone" for="viral-file" id="viral-dropzone">
+                                        <span class="sweep"></span>
+                                        <strong>Перетащите видео или нажмите</strong>
+                                        <span id="viral-dropzone-hint">MP4, MOV, WEBM, MKV</span>
+                                        <input type="file" id="viral-file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv">
+                                    </label>
                                 </div>
                                 <div class="form-group">
                                     <label for="viral-url">или ссылка</label>
@@ -233,9 +238,9 @@
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="viral-genre">Жанр</label>
+                                    <label>Жанр</label>
                                     <div class="select-wrap">
-                                    <select id="viral-genre" class="select-ui">
+                                    <select id="viral-genre">
                                         <option value="default">Обычный</option>
                                         <option value="ugc">UGC / отзыв</option>
                                         <option value="tutorial">Туториал</option>
@@ -243,6 +248,14 @@
                                         <option value="review">Обзор</option>
                                         <option value="unboxing">Анбоксинг</option>
                                     </select>
+                                    </div>
+                                    <div class="preset-grid" id="viral-genre-presets">
+                                        <div class="preset-card is-active" data-value="default" role="button" tabindex="0"><svg class="mark-scribble" data-loops="2" viewBox="0 0 100 100"><path/></svg><span>Обычный</span></div>
+                                        <div class="preset-card" data-value="ugc" role="button" tabindex="0"><svg class="mark-scribble" data-loops="2" viewBox="0 0 100 100"><path/></svg><span>UGC / отзыв</span></div>
+                                        <div class="preset-card" data-value="tutorial" role="button" tabindex="0"><svg class="mark-scribble" data-loops="2" viewBox="0 0 100 100"><path/></svg><span>Туториал</span></div>
+                                        <div class="preset-card" data-value="hook_battle" role="button" tabindex="0"><svg class="mark-scribble" data-loops="2" viewBox="0 0 100 100"><path/></svg><span>Хук-спор</span></div>
+                                        <div class="preset-card" data-value="review" role="button" tabindex="0"><svg class="mark-scribble" data-loops="2" viewBox="0 0 100 100"><path/></svg><span>Обзор</span></div>
+                                        <div class="preset-card" data-value="unboxing" role="button" tabindex="0"><svg class="mark-scribble" data-loops="2" viewBox="0 0 100 100"><path/></svg><span>Анбоксинг</span></div>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -298,30 +311,22 @@
                                     </select>
                                     </div>
                                 </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="viral-kinetic">
-                                        Кинетические субтитры (следуют за спикером)
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="viral-volumetric">
-                                        Объёмный заголовок (хук)
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="viral-rights" required>
-                                        Подтверждаю наличие прав на загружаемый материал
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="viral-ai-disclosure">
-                                        Отметить ролик как созданный с помощью ИИ
-                                    </label>
-                                </div>
+                                <label class="toggle-row">
+                                    <span>Кинетические субтитры (следуют за спикером)</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="viral-kinetic"><span class="knob"></span></span>
+                                </label>
+                                <label class="toggle-row">
+                                    <span>Объёмный заголовок (хук)</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="viral-volumetric"><span class="knob"></span></span>
+                                </label>
+                                <label class="toggle-row">
+                                    <span>Подтверждаю наличие прав на загружаемый материал</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="viral-rights" required><span class="knob"></span></span>
+                                </label>
+                                <label class="toggle-row">
+                                    <span>Отметить ролик как созданный с помощью ИИ</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="viral-ai-disclosure"><span class="knob"></span></span>
+                                </label>
                                 <div class="form-actions">
                                     <button type="submit" class="btn btn-primary btn-large">Сделать вирусным</button>
                                 </div>
@@ -350,7 +355,12 @@
                             <form id="clips-form">
                                 <div class="form-group">
                                     <label for="clips-file">Видеофайл</label>
-                                    <input type="file" id="clips-file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv">
+                                    <label class="dropzone" for="clips-file" id="clips-dropzone">
+                                        <span class="sweep"></span>
+                                        <strong>Перетащите видео или нажмите</strong>
+                                        <span id="clips-dropzone-hint">MP4, MOV, WEBM, MKV</span>
+                                        <input type="file" id="clips-file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv">
+                                    </label>
                                 </div>
                                 <div class="form-group">
                                     <label for="clips-url">или ссылка</label>
@@ -396,30 +406,22 @@
                                     </select>
                                     </div>
                                 </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="clips-kinetic">
-                                        Кинетические субтитры (следуют за спикером)
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="clips-volumetric">
-                                        Объёмный заголовок (хук)
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="clips-rights" required>
-                                        Подтверждаю наличие прав на загружаемый материал
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="clips-ai-disclosure">
-                                        Отметить клипы как созданные с помощью ИИ
-                                    </label>
-                                </div>
+                                <label class="toggle-row">
+                                    <span>Кинетические субтитры (следуют за спикером)</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="clips-kinetic"><span class="knob"></span></span>
+                                </label>
+                                <label class="toggle-row">
+                                    <span>Объёмный заголовок (хук)</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="clips-volumetric"><span class="knob"></span></span>
+                                </label>
+                                <label class="toggle-row">
+                                    <span>Подтверждаю наличие прав на загружаемый материал</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="clips-rights" required><span class="knob"></span></span>
+                                </label>
+                                <label class="toggle-row">
+                                    <span>Отметить клипы как созданные с помощью ИИ</span>
+                                    <span class="toggle-switch"><input type="checkbox" id="clips-ai-disclosure"><span class="knob"></span></span>
+                                </label>
                                 <div class="form-actions">
                                     <button type="submit" class="btn btn-primary btn-large">Нарезать клипы</button>
                                 </div>
@@ -685,6 +687,7 @@
             </main>
         </div>
     </div>
+    <script src="/legal/static/js/scribble.js" defer></script>
     <script src="/dashboard/static/js/client.js"></script>
     <script src="/legal/static/js/cookie-consent.js" defer></script>
 </body>

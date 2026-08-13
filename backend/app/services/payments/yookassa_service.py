@@ -38,7 +38,7 @@ async def create_payment(package_id: str, client_id: int) -> dict:
         "amount": {"value": f"{package['price_rub']:.2f}", "currency": "RUB"},
         "confirmation": {"type": "redirect", "return_url": return_url},
         "capture": True,
-        "description": f"VideoGen — пакет «{package['label']}» ({package['tokens']} токенов)",
+        "description": f"LoudCut — пакет «{package['label']}» ({package['tokens']} токенов)",
         "metadata": {"client_id": str(client_id), "package_id": package_id},
     }
 

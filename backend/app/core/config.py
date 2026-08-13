@@ -4,7 +4,7 @@ import os
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "AI Video Generator"
+    PROJECT_NAME: str = "LoudCut"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     # development | production — production refuses insecure default SECRET_KEY

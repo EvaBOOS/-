@@ -38,13 +38,44 @@ body {
 }
 @media (max-width: 760px) { .shell { grid-template-columns: 1fr; } }
 
-.doc-nav { border-right: 1px solid var(--line); padding-right: 24px; }
-@media (max-width: 760px) { .doc-nav { border-right: none; border-bottom: 1px solid var(--line); padding-right: 0; padding-bottom: 20px; } }
+.doc-nav {
+    border-right: 1px solid var(--line); padding-right: 24px;
+    position: sticky; top: 24px; align-self: start;
+}
+@media (max-width: 760px) { .doc-nav { border-right: none; border-bottom: 1px solid var(--line); padding-right: 0; padding-bottom: 20px; position: static; } }
 .doc-nav p.eyebrow { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 12px; }
-.doc-nav ul { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.doc-nav .toc-label { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.doc-nav ul, .doc-nav ol { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .doc-nav a { display: block; padding: 8px 10px; color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; font-weight: 700; border-left: 2px solid transparent; }
 .doc-nav a:hover { color: var(--ink); background: var(--field); }
-.doc-nav a.active { color: var(--ink); border-left-color: var(--accent); background: var(--field); }
+.doc-nav a.active, .doc-nav a.is-current { color: var(--ink); border-left-color: var(--accent); background: var(--field); }
+.doc-nav ol a { font-size: 0.84rem; }
+
+.doc-header-block {
+    border: 1.5px solid var(--ink); background: var(--field); padding: 12px 14px; margin-bottom: 22px;
+    display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 0.78rem;
+}
+.doc-header-block div strong { display: block; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin-bottom: 2px; }
+.doc-print-btn {
+    display: inline-flex; align-items: center; gap: 6px; margin-bottom: 22px;
+    font-size: 0.78rem; font-weight: 800; padding: 7px 12px; border: 1.5px solid var(--ink); background: var(--paper); cursor: pointer;
+}
+.doc-print-btn:hover { background: var(--field); }
+
+.clauses { list-style: none; padding: 0; margin: 0; counter-reset: clause; }
+.clauses > li { counter-increment: clause; margin-bottom: 22px; scroll-margin-top: 20px; }
+.clauses > li > h2 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.clauses > li > h2::before { content: counter(clause) ". "; color: var(--accent); }
+.clauses > li > p { color: var(--ink-soft); font-size: 0.92rem; max-width: 62ch; }
+.sub-clauses { list-style: none; padding: 0; margin: 8px 0 0; counter-reset: sub; }
+.sub-clauses > li { counter-increment: sub; padding-left: 2.4em; text-indent: -2.4em; margin-bottom: 7px; font-size: 0.92rem; color: var(--ink-soft); max-width: 62ch; }
+.sub-clauses > li::before { content: counter(clause) "." counter(sub) ". "; font-weight: 800; color: var(--ink); }
+
+@media print {
+    .topbar, .doc-nav, .draft-banner, .doc-print-btn { display: none; }
+    .shell { display: block; max-width: none; padding: 0; }
+    body { background: #fff; }
+}
 
 .draft-banner {
     display: flex; align-items: flex-start; gap: 10px;
@@ -57,10 +88,6 @@ body {
 h1.doc-title { font-family: var(--font-display); font-size: clamp(1.7rem, 4vw, 2.3rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
 p.doc-lead { color: var(--ink-soft); max-width: 60ch; margin-bottom: 32px; }
 
-.section-list { display: flex; flex-direction: column; gap: 18px; }
-.section-item { border: 2px solid var(--ink); background: color-mix(in srgb, var(--paper) 60%, white); padding: 16px 20px; }
-.section-item h2 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
-.section-item p { color: var(--ink-soft); font-size: 0.92rem; max-width: 62ch; }
 
 .doc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .doc-card { border: 2px solid var(--ink); background: var(--paper); padding: 18px; text-decoration: none; color: var(--ink); box-shadow: 4px 4px 0 rgba(18, 20, 15, 0.16); transition: transform 0.15s, box-shadow 0.15s; }
