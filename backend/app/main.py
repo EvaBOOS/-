@@ -161,12 +161,22 @@ def _favicon_path(filename: str = "favicon.png") -> str:
 
 
 @app.get("/favicon.ico", include_in_schema=False)
-@app.get("/favicon.png", include_in_schema=False)
-async def favicon():
-    """Browser tab emblem — LoudCut cat mark."""
+async def favicon_ico():
+    """Browser tab emblem — LoudCut teal mark."""
+    path = _favicon_path("favicon.ico")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/x-icon")
     path = _favicon_path("favicon-32.png")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/png")
+    return JSONResponse(status_code=404, content={"detail": "favicon not found"})
+
+
+@app.get("/favicon.png", include_in_schema=False)
+async def favicon_png():
+    path = _favicon_path("favicon.png")
     if not os.path.exists(path):
-        path = _favicon_path("favicon.png")
+        path = _favicon_path("favicon-192.png")
     if os.path.exists(path):
         return FileResponse(path, media_type="image/png")
     return JSONResponse(status_code=404, content={"detail": "favicon not found"})
