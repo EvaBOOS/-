@@ -202,7 +202,11 @@ class AiClipsPipeline:
                     framed,
                     width=settings.VIDEO_WIDTH,
                     height=settings.VIDEO_HEIGHT,
+                    face_aware=True,
                 )
+                polished = os.path.join(work_dir, f"clip_{i+1}_audio.mp4")
+                self.ffmpeg.prepare_program_audio(framed, polished)
+                framed = polished
 
                 track_points = None
                 if generation.api_responses.get("kinetic_subtitles"):
@@ -330,6 +334,10 @@ class AiClipsPipeline:
             generation.final_video_path = best
             generation.duration_seconds = int(self.ffmpeg.get_video_duration(best))
             generation.file_size_bytes = self.ffmpeg.get_file_size(best)
+            try:
+                generation.api_responses["qc"] = self.ffmpeg.qc_export(best)
+            except Exception:
+                pass
             generation.progress_percent = 100
             generation.status = GenerationStatus.COMPLETED
             generation.completed_at = datetime.utcnow()

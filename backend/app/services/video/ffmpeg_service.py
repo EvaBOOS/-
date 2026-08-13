@@ -4,7 +4,7 @@ import uuid
 import subprocess
 import json
 import shutil
-from typing import Callable, Optional, List, Dict
+from typing import Callable, Optional, List, Dict, Any, Any, Any
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,38 @@ class FFmpegService:
         self.output_dir = settings.GENERATED_DIR
         self.ffmpeg_bin = _resolve_binary("ffmpeg")
         self.ffprobe_bin = _resolve_binary("ffprobe")
+
+    def _x264_args(self, audio: bool = True, audio_copy: bool = False) -> list:
+        """Social-safe encode: yuv420p + bt709 tags so iPhone/Safari isn't washed out."""
+        args = [
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+            "-movflags", "+faststart",
+        ]
+        if audio_copy:
+            args.extend(["-c:a", "copy"])
+        elif audio:
+            args.extend(["-c:a", "aac", "-b:a", "160k"])
+        else:
+            args.append("-an")
+        return args
+
+    def _parse_loudnorm_json(self, stderr: str) -> Optional[Dict]:
+        if not stderr:
+            return None
+        start = stderr.rfind("{")
+        end = stderr.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            data = json.loads(stderr[start:end + 1])
+        except json.JSONDecodeError:
+            return None
+        keys = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
+        if not all(k in data for k in keys):
+            return None
+        return data
         
     def get_video_duration(self, video_path: str) -> float:
         """Get video duration in seconds using ffprobe."""
@@ -722,6 +754,8 @@ class FFmpegService:
         max_cut_ratio: float = 0.35,
         min_silence_len: float = 0.55,
         skip_if_kept_ratio_above: float = 0.97,
+        keep_air: float = 0.0,
+        audio_fade: float = 0.03,
         on_fallback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """
@@ -750,8 +784,15 @@ class FFmpegService:
         keep: List[Dict[str, float]] = []
         cursor = 0.0
         for sil in silences:
-            s = max(0.0, sil["start"] - pad)
-            e = min(duration, sil["end"] + pad)
+            if keep_air > 0:
+                # Cut only the interior of the pause, leaving keep_air of "breath"
+                s = min(duration, sil["start"] + keep_air)
+                e = max(0.0, sil["end"] - keep_air)
+                if e <= s:
+                    continue
+            else:
+                s = max(0.0, sil["start"] - pad)
+                e = min(duration, sil["end"] + pad)
             if s - cursor >= min_keep:
                 keep.append({"start": cursor, "end": s})
             cursor = max(cursor, e)
@@ -771,15 +812,23 @@ class FFmpegService:
             return output_path
 
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-        # filter: trim+concat
+        fade = max(0.0, float(audio_fade or 0))
         parts = []
         labels = []
         for i, seg in enumerate(keep):
             start = seg["start"]
-            dur = seg["end"] - seg["start"]
+            dur = max(0.05, seg["end"] - seg["start"])
+            fade_d = min(fade, dur / 4) if fade else 0.0
+            if fade_d > 0:
+                fade_out_st = max(0.0, dur - fade_d)
+                audio = (
+                    f"[0:a]atrim=start={start}:duration={dur},asetpts=PTS-STARTPTS,"
+                    f"afade=t=in:d={fade_d:.3f},afade=t=out:st={fade_out_st:.3f}:d={fade_d:.3f}[a{i}]"
+                )
+            else:
+                audio = f"[0:a]atrim=start={start}:duration={dur},asetpts=PTS-STARTPTS[a{i}]"
             parts.append(
-                f"[0:v]trim=start={start}:duration={dur},setpts=PTS-STARTPTS[v{i}];"
-                f"[0:a]atrim=start={start}:duration={dur},asetpts=PTS-STARTPTS[a{i}]"
+                f"[0:v]trim=start={start}:duration={dur},setpts=PTS-STARTPTS[v{i}];{audio}"
             )
             labels.append(f"[v{i}][a{i}]")
         filter_complex = ";".join(parts) + ";" + "".join(labels) + f"concat=n={len(keep)}:v=1:a=1[outv][outa]"
@@ -787,11 +836,7 @@ class FFmpegService:
             self.ffmpeg_bin, "-y", "-i", video_path,
             "-filter_complex", filter_complex,
             "-map", "[outv]", "-map", "[outa]",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k",
-            "-movflags", "+faststart",
-            output_path,
-        ]
+        ] + self._x264_args() + [output_path]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             err = (result.stderr or "")[-300:]
@@ -819,25 +864,216 @@ class FFmpegService:
         output_path: str,
         width: int = 1080,
         height: int = 1920,
+        face_aware: bool = True,
     ) -> str:
-        """Center-crop / pad to target aspect (9:16, 1:1, 16:9, ...)."""
+        """Cover-crop / pad to target aspect (9:16, 1:1, 16:9, ...).
+
+        When face_aware and a face is found, crop follows a smoothed track
+        (EMA + hysteresis + pan-speed cap) with eyes on the upper third.
+        Falls back to a centered lanczos crop.
+        """
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        src_w, src_h = self.get_video_size(video_path)
+        duration = float(self.get_video_duration(video_path) or 0)
+        holds = []
+        if face_aware and src_w > 0 and src_h > 0:
+            try:
+                from app.services.video.face_tracking import (
+                    FaceTrackingService,
+                    crop_holds_from_track,
+                    smooth_face_centers,
+                )
+                raw = FaceTrackingService().track_face_centers(video_path, sample_fps=6.0)
+                smoothed = smooth_face_centers(raw, duration, src_w, src_h)
+                holds = crop_holds_from_track(
+                    smoothed, src_w, src_h, width, height, duration
+                )
+            except Exception as exc:
+                logger.info("face-aware crop skipped: %s", exc)
+                holds = []
+
+        if holds and len(holds) > 1:
+            ok = self._scale_format_holds(video_path, output_path, width, height, holds)
+            if ok:
+                return output_path
+            holds = holds[:1]
+
+        crop_xy = ""
+        if holds:
+            x = int(round(holds[0]["x"]))
+            y = int(round(holds[0]["y"]))
+            crop_xy = f":x={x}:y={y}"
         vf = (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},setsar=1"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={width}:{height}{crop_xy},setsar=1"
         )
         cmd = [
             self.ffmpeg_bin, "-y", "-i", video_path,
             "-vf", vf,
-            "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k",
+        ] + self._x264_args() + [output_path]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise Exception(f"FFmpeg format scale error: {result.stderr}")
+        return output_path
+
+    def _scale_format_holds(
+        self,
+        video_path: str,
+        output_path: str,
+        width: int,
+        height: int,
+        holds: List[Dict[str, float]],
+    ) -> bool:
+        import tempfile
+        segs = []
+        with tempfile.TemporaryDirectory() as tmp:
+            for i, hold in enumerate(holds):
+                start = max(0.0, float(hold["start"]))
+                dur = max(0.12, float(hold["end"]) - start)
+                x = int(round(hold["x"]))
+                y = int(round(hold["y"]))
+                seg = os.path.join(tmp, f"h{i:03d}.mp4")
+                vf = (
+                    f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+                    f"crop={width}:{height}:x={x}:y={y},setsar=1"
+                )
+                cmd = [
+                    self.ffmpeg_bin, "-y",
+                    "-ss", f"{start:.3f}", "-t", f"{dur:.3f}",
+                    "-i", video_path,
+                    "-vf", vf,
+                ] + self._x264_args() + [seg]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0 or not os.path.isfile(seg):
+                    return False
+                segs.append(seg)
+            lst = os.path.join(tmp, "list.txt")
+            with open(lst, "w", encoding="utf-8") as f:
+                for s in segs:
+                    f.write(f"file '{s.replace(chr(92), '/')}'\n")
+            cmd = [
+                self.ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", lst,
+                "-c", "copy", "-movflags", "+faststart", output_path,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            return result.returncode == 0 and os.path.isfile(output_path)
+
+    def prepare_program_audio(
+        self,
+        video_path: str,
+        output_path: str,
+        on_fallback: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """Denoise → two-pass loudnorm −14 LUFS → limiter; trim leading silence.
+
+        Applied once per generation so later music ducking doesn't re-normalize.
+        """
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        src = video_path
+        # Trim inhale / dead air at the start
+        try:
+            silences = self.detect_silence_intervals(src, noise_db=-32.0, min_silence=0.22)
+            if silences and silences[0]["start"] <= 0.08 and silences[0]["end"] >= 0.30:
+                keep_from = max(0.0, silences[0]["end"] - 0.08)
+                trimmed = output_path + ".lead.mp4"
+                cmd = [
+                    self.ffmpeg_bin, "-y", "-ss", f"{keep_from:.3f}", "-i", src,
+                    "-c", "copy", "-movflags", "+faststart", trimmed,
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0 and os.path.isfile(trimmed):
+                    src = trimmed
+        except Exception:
+            pass
+
+        measure = [
+            self.ffmpeg_bin, "-i", src,
+            "-af", "loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json",
+            "-f", "null", "-",
+        ]
+        measured = self._parse_loudnorm_json(
+            subprocess.run(measure, capture_output=True, text=True).stderr or ""
+        )
+        if measured:
+            ln = (
+                "loudnorm=I=-14:TP=-1.5:LRA=11:"
+                f"measured_I={measured['input_i']}:"
+                f"measured_TP={measured['input_tp']}:"
+                f"measured_LRA={measured['input_lra']}:"
+                f"measured_thresh={measured['input_thresh']}:"
+                f"offset={measured['target_offset']}:linear=true"
+            )
+        else:
+            ln = "loudnorm=I=-14:TP=-1.5:LRA=11"
+
+        af = f"highpass=f=80,afftdn=nr=10:nf=-20,{ln},alimiter=limit=0.95"
+        cmd = [
+            self.ffmpeg_bin, "-y", "-i", src,
+            "-af", af,
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "160k",
             "-movflags", "+faststart",
             output_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            raise Exception(f"FFmpeg format scale error: {result.stderr}")
+            # Retry without afftdn (some ffmpeg builds lack it)
+            af = f"highpass=f=80,{ln},alimiter=limit=0.95"
+            cmd[cmd.index("-af") + 1] = af
+            result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            err = (result.stderr or "")[-300:]
+            logger.warning("prepare_program_audio failed, shipping source audio: %s", err)
+            if on_fallback:
+                on_fallback(f"audio polish skipped: {err[:150]}")
+            if src != video_path and os.path.isfile(src):
+                shutil.copy2(src, output_path)
+            else:
+                shutil.copy2(video_path, output_path)
+            return output_path
         return output_path
+
+    def qc_export(self, video_path: str) -> Dict[str, Any]:
+        """Lightweight pre-ship checks. Never fails the job — log + auto-hints."""
+        duration = float(self.get_video_duration(video_path) or 0)
+        lead = 0.0
+        try:
+            silences = self.detect_silence_intervals(
+                video_path, noise_db=-32.0, min_silence=0.2
+            )
+            if silences and silences[0]["start"] <= 0.08:
+                lead = float(silences[0]["end"])
+        except Exception:
+            pass
+        integrated = None
+        true_peak = None
+        try:
+            stats = self._parse_loudnorm_json(
+                subprocess.run(
+                    [
+                        self.ffmpeg_bin, "-i", video_path,
+                        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json",
+                        "-f", "null", "-",
+                    ],
+                    capture_output=True, text=True,
+                ).stderr or ""
+            )
+            if stats:
+                integrated = float(stats.get("input_i") or 0)
+                true_peak = float(stats.get("input_tp") or 0)
+        except Exception:
+            pass
+        return {
+            "duration_s": round(duration, 2),
+            "lead_silence_s": round(lead, 2),
+            "lead_ok": lead < 0.3,
+            "lufs": integrated,
+            "lufs_ok": integrated is None or abs(integrated - (-14.0)) <= 2.5,
+            "true_peak_db": true_peak,
+            "peak_ok": true_peak is None or true_peak <= -0.5,
+            "shorts_ok": duration <= 60.5,
+            "reels_ok": duration <= 90.5,
+        }
 
     def apply_zoom_moments(
         self,
@@ -1010,8 +1246,8 @@ class FFmpegService:
         highlight = {w.lower().strip(".,!?;:«»\"'") for w in (highlight_words or [])}
         font_size = max(40, min(int(font_size or 64), 120))
         hot_font_size = max(font_size, min(int(hot_font_size or 72), 130))
-        chunk_n = max(1, min(int(words_per_chunk or 4), 6))
-        outline_n = max(1, min(int(outline or 3), 8))
+        chunk_n = max(1, min(int(words_per_chunk or 3), 6))
+        outline_n = max(5, min(int(outline or 6), 8))
         # ASS BGR: white default, accent color (cyan/yellow unless overridden)
         # for the word being spoken right now
         accent_hex = self._color_to_ass(accent_color) if accent_color else "00E5FF"
@@ -1034,6 +1270,8 @@ class FFmpegService:
             emphasis_open = sync_c
             emphasis_reset = sync_reset
 
+        margin_v = max(80, int(round(video_height * 0.32)))
+        hook_margin = max(80, int(round(video_height * 0.18)))
         header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {video_width}
@@ -1042,8 +1280,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_name},{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,{outline_n},1,2,60,60,180,1
-Style: Hook,{font_name},{hot_font_size + 4},&H0000E5FF,&H000000FF,&H00000000,&HA0000000,-1,0,0,0,100,100,0,0,1,{outline_n + 2},2,8,60,60,260,1
+Style: Default,{font_name},{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,{outline_n},2,2,60,60,{margin_v},1
+Style: Hook,{font_name},{hot_font_size + 4},&H0000E5FF,&H000000FF,&H00000000,&HA0000000,-1,0,0,0,100,100,0,0,1,{outline_n + 2},3,8,60,60,{hook_margin},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -1163,6 +1401,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             self.ffmpeg_bin, "-y", "-i", video_path,
             "-vf", filt,
             "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
             "-c:a", "copy",
             "-movflags", "+faststart",
             output_path,
@@ -1549,14 +1789,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         vol = min(max(music_volume, 0.04), 0.35)
-        loudnorm = "loudnorm=I=-16:TP=-1.5:LRA=11"
-
-        # Prefer sidechain ducking; fall back to quiet amix
+        # Voice is already loudnorm'd in prepare_program_audio; only duck the bed.
         filter_duck = (
             f"[1:a]volume={vol * 2:.3f},aloop=loop=-1:size=2e+09,aformat=fltp[music];"
-            f"[0:a]{loudnorm},asplit=2[voice][sc];"
+            f"[0:a]asplit=2[voice][sc];"
             f"[music][sc]sidechaincompress=threshold=0.04:ratio=7:attack=25:release=280:makeup=1[ducked];"
-            f"[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            f"[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2,alimiter=limit=0.95[aout]"
         )
         cmd = [
             self.ffmpeg_bin, "-y",
@@ -1576,9 +1814,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         duck_err = (result.stderr or "")[-300:]
 
         filter_simple = (
-            f"[0:a]{loudnorm}[voice];"
+            f"[0:a]anull[voice];"
             f"[1:a]volume={vol:.3f},aloop=loop=-1:size=2e+09[bg];"
-            f"[voice][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            f"[voice][bg]amix=inputs=2:duration=first:dropout_transition=2,alimiter=limit=0.95[aout]"
         )
         cmd = [
             self.ffmpeg_bin, "-y",

@@ -190,17 +190,19 @@ class ViralEditPipeline:
             # 1) Soft silence cut → target format
             await self._update(generation, GenerationStatus.VIRAL_EDIT, progress=8)
             silences = self.ffmpeg.detect_silence_intervals(
-                source, noise_db=-30.0, min_silence=0.7
+                source, noise_db=-32.0, min_silence=0.38
             )
             cut_path = os.path.join(work_dir, "cut.mp4")
             self.ffmpeg.keep_speech_segments(
                 source,
                 cut_path,
                 silences,
-                min_keep=0.35,
-                pad=0.2,
-                max_cut_ratio=0.35,
-                min_silence_len=0.55,
+                min_keep=0.30,
+                pad=0.0,
+                keep_air=0.10,
+                audio_fade=0.03,
+                max_cut_ratio=0.45,
+                min_silence_len=0.35,
                 on_fallback=_warn,
             )
             generation.api_responses["silence_cuts"] = len(silences)
@@ -212,7 +214,11 @@ class ViralEditPipeline:
                 framed_path,
                 width=width,
                 height=height,
+                face_aware=True,
             )
+            polished = os.path.join(work_dir, "framed_audio.mp4")
+            self.ffmpeg.prepare_program_audio(framed_path, polished, on_fallback=_warn)
+            framed_path = polished
             source_dark = self.ffmpeg.is_mostly_dark(framed_path)
             generation.api_responses["source_dark"] = source_dark
             await self.db.commit()
@@ -946,6 +952,10 @@ class ViralEditPipeline:
 
             final_path = os.path.join(work_dir, f"final_{generation_id}.mp4")
             shutil.copy2(marked_path, final_path)
+            try:
+                generation.api_responses["qc"] = self.ffmpeg.qc_export(final_path)
+            except Exception as qc_err:
+                generation.api_responses["qc"] = {"error": str(qc_err)[:200]}
 
             # Optional A/B hook exports (same edit, alternate opening hooks)
             hook_exports = []
