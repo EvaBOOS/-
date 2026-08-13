@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import struct
 import zlib
 from typing import Any, Dict, Optional
@@ -9,7 +10,14 @@ from typing import Any, Dict, Optional
 from app.core.config import settings
 from app.models.client import Client, SubscriptionPlan
 
-# Tiny 5x7 uppercase glyphs for "VIDEOGEN" fallback (no Pillow required)
+# Packaged LoudCut lockups (designed PNGs with ~65% alpha already baked in).
+_PACKAGED_BRANDING = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "assets", "branding")
+)
+_PLATFORM_MARK_WHITE = "loudcut-watermark-lockup-white-65opacity.png"
+_PLATFORM_MARK_DARK = "loudcut-watermark-lockup-dark-65opacity.png"
+
+# Tiny 5x7 uppercase glyphs for text fallback (no Pillow required)
 _GLYPHS = {
     "V": ["10001", "10001", "10001", "10001", "01010", "01010", "00100"],
     "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
@@ -18,6 +26,10 @@ _GLYPHS = {
     "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
     "G": ["01110", "10001", "10000", "10111", "10001", "10001", "01110"],
     "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "C": ["01110", "10001", "10000", "10000", "10000", "10001", "01110"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
     " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
 }
 
@@ -109,13 +121,46 @@ def _write_text_watermark_png(path: str, text: str = "VIDEOGEN") -> None:
         f.write(png)
 
 
-def platform_watermark_path() -> str:
-    """Generate/cache a LoudCut PNG mark under assets/branding."""
+def _ensure_packaged_mark(filename: str) -> Optional[str]:
+    """Copy a packaged lockup into the runtime assets/branding cache if needed."""
+    packaged = os.path.join(_PACKAGED_BRANDING, filename)
+    if not os.path.isfile(packaged):
+        return None
     out_dir = os.path.join(_assets_root(), "branding")
     os.makedirs(out_dir, exist_ok=True)
-    # Renamed from videogen_watermark.png (LoudCut rebrand, 2026-08-13) so a
-    # stale pre-rebrand PNG already cached on disk gets regenerated instead
-    # of silently continuing to serve the old "VideoGen" mark forever.
+    dest = os.path.join(out_dir, filename)
+    try:
+        if (
+            not os.path.isfile(dest)
+            or os.path.getsize(dest) != os.path.getsize(packaged)
+            or os.path.getmtime(dest) < os.path.getmtime(packaged)
+        ):
+            shutil.copy2(packaged, dest)
+    except OSError:
+        # Fall back to reading the packaged file directly (read-only volume).
+        return packaged
+    return dest if os.path.isfile(dest) else packaged
+
+
+def platform_watermark_path(variant: str = "white") -> str:
+    """LoudCut platform mark for free / non-premium exports.
+
+    Prefers the designed lockup PNGs (white on busy/dark footage by default).
+    Falls back to a generated text pill only if packaged assets are missing.
+    """
+    name = _PLATFORM_MARK_WHITE if variant != "dark" else _PLATFORM_MARK_DARK
+    path = _ensure_packaged_mark(name)
+    if path:
+        return path
+    # Alternate variant if preferred missing
+    alt = _ensure_packaged_mark(
+        _PLATFORM_MARK_DARK if variant != "dark" else _PLATFORM_MARK_WHITE
+    )
+    if alt:
+        return alt
+
+    out_dir = os.path.join(_assets_root(), "branding")
+    os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "loudcut_watermark.png")
     if os.path.isfile(path) and os.path.getsize(path) > 400:
         return path
@@ -142,6 +187,18 @@ def platform_watermark_path() -> str:
         return path
 
 
+def _platform_mark_params(light: bool = False) -> Dict[str, Any]:
+    """Designed lockups already include ~65% alpha — keep FFmpeg opacity at 100."""
+    return {
+        "path": platform_watermark_path("dark" if light else "white"),
+        "position": "bottom_right",
+        # PNG already has 65% opacity baked in; don't multiply another fade.
+        "opacity": 100,
+        "scale": 14 if not light else 12,
+        "kind": "platform",
+    }
+
+
 def resolve_export_watermark(client: Client) -> Optional[Dict[str, Any]]:
     """
     Basic: always watermark (brand logo if set, else LoudCut mark).
@@ -166,23 +223,14 @@ def resolve_export_watermark(client: Client) -> Optional[Dict[str, Any]]:
     if plan == SubscriptionPlan.STANDARD:
         if custom:
             return custom
-        return {
-            "path": platform_watermark_path(),
-            "position": "bottom_right",
-            "opacity": 42,
-            "scale": 11,
-            "kind": "platform",
-        }
+        # Slightly smaller / softer platform mark on Standard
+        params = _platform_mark_params(light=False)
+        params["scale"] = 11
+        return params
 
     if custom:
         return custom
-    return {
-        "path": platform_watermark_path(),
-        "position": "bottom_right",
-        "opacity": 68,
-        "scale": 13,
-        "kind": "platform",
-    }
+    return _platform_mark_params(light=False)
 
 
 def plan_watermark_policy(plan: SubscriptionPlan | str) -> Dict[str, str]:
