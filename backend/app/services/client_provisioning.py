@@ -23,6 +23,7 @@ async def provision_client(
     heygen_avatar_id: Optional[str] = None,
     custom_voice_clone_id: Optional[str] = None,
     initial_credits: Optional[int] = None,
+    email_verified: bool = True,
 ) -> Client:
     """Create the User+Client+ClientBranding trio shared by admin-provisioned
     B2B accounts (direct create, application approval) and self-serve public
@@ -43,7 +44,8 @@ async def provision_client(
         email=user_email,
         hashed_password=get_password_hash(user_password),
         full_name=user_full_name,
-        role=UserRole.CLIENT
+        role=UserRole.CLIENT,
+        email_verified=email_verified,
     )
     db.add(user)
     await db.flush()

@@ -91,6 +91,7 @@ class ClientResponse(ClientBase):
     is_active: bool
     terms_accepted_at: Optional[datetime] = None
     marketing_opt_in: bool = False
+    email_verified: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -116,6 +117,7 @@ class ClientApplicationCreate(BaseModel):
     portfolio_url: Optional[str] = None
     message: Optional[str] = None
     accepted_terms: bool = False
+    captcha_token: Optional[str] = None
 
 
 class ClientApplicationResponse(BaseModel):
@@ -155,3 +157,4 @@ class PublicRegisterRequest(BaseModel):
     password: str = Field(..., min_length=8)
     accepted_terms: bool = False
     marketing_opt_in: bool = False
+    captcha_token: Optional[str] = None

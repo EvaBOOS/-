@@ -45,6 +45,7 @@ class ChangePasswordRequest(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    email_verified: bool = True
 
 
 class TokenPayload(BaseModel):

@@ -18,6 +18,7 @@ class User(Base):
     full_name = Column(String(255), nullable=True)
     role = Column(SQLEnum(UserRole), default=UserRole.CLIENT, nullable=False)
     is_active = Column(Boolean, default=True)
+    email_verified = Column(Boolean, default=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

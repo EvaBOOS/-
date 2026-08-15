@@ -33,6 +33,7 @@ async def ensure_schema_patches(engine: AsyncEngine, database_url: str) -> None:
         ("clients", "moderation_strikes", "INTEGER DEFAULT 0"),
         ("clients", "last_strike_at", _dt_type),
         ("clients", "moderation_frozen_at", _dt_type),
+        ("users", "email_verified", "BOOLEAN DEFAULT TRUE"),
     ]
 
     async with engine.begin() as conn:

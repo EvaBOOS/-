@@ -1,4 +1,31 @@
 const API_BASE = '/api/v1';
+let captchaToken = '';
+
+async function mountSmartCaptcha(containerId) {
+    try {
+        const cfg = await fetch(`${API_BASE}/public/antispam`).then((r) => r.json());
+        if (!cfg.captcha_enabled || !cfg.site_key) return;
+        const box = document.getElementById(containerId);
+        if (!box) return;
+        if (!window.smartCaptcha) {
+            await new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://smartcaptcha.yandexcloud.net/captcha.js';
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        }
+        if (window.smartCaptcha && window.smartCaptcha.render) {
+            window.smartCaptcha.render(box, {
+                sitekey: cfg.site_key,
+                callback: (token) => { captchaToken = token; },
+            });
+        }
+    } catch (e) {
+        console.warn('captcha init', e);
+    }
+}
 
 const companyLabel = document.getElementById('company-or-social-label');
 const companyInput = document.getElementById('company-or-social');
@@ -31,7 +58,8 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
         company_name: accountType === 'company' ? companyOrSocial : null,
         portfolio_url: accountType === 'blogger' ? companyOrSocial : null,
         message: document.getElementById('message').value || null,
-        accepted_terms: document.getElementById('accepted-terms').checked
+        accepted_terms: document.getElementById('accepted-terms').checked,
+        captcha_token: captchaToken || null,
     };
 
     try {
@@ -52,3 +80,5 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
         errorEl.textContent = err.message;
     }
 });
+
+mountSmartCaptcha('apply-captcha');

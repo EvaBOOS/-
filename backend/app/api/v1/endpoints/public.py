@@ -20,6 +20,18 @@ from app.schemas.client import (
 from app.schemas.user import Token
 from app.services.client_provisioning import provision_client
 from app.services.payments import yookassa_service
+from fastapi.responses import RedirectResponse
+from app.services.antispam import (
+    captcha_configured,
+    client_ip,
+    create_email_verify_token,
+    is_disposable_email,
+    parse_email_verify_token,
+    send_verification_email,
+    smtp_configured,
+    verify_smartcaptcha,
+)
+from app.models.user import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -28,6 +40,7 @@ logger = logging.getLogger(__name__)
 @router.post("/apply", response_model=ClientApplicationResponse, status_code=status.HTTP_201_CREATED)
 async def submit_application(
     application_data: ClientApplicationCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Public, unauthenticated endpoint — a company or blogger requests
@@ -38,7 +51,13 @@ async def submit_application(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Необходимо принять условия обработки персональных данных",
         )
-    data = application_data.model_dump(exclude={"accepted_terms"})
+    if is_disposable_email(application_data.email):
+        raise HTTPException(status_code=400, detail="Используйте постоянный email, не одноразовый")
+    if captcha_configured():
+        ok = await verify_smartcaptcha(application_data.captcha_token or "", client_ip(request))
+        if not ok:
+            raise HTTPException(status_code=400, detail="Подтвердите, что вы не робот")
+    data = application_data.model_dump(exclude={"accepted_terms", "captcha_token"})
     application = ClientApplication(**data, terms_accepted_at=datetime.utcnow())
     db.add(application)
     await db.commit()
@@ -49,6 +68,7 @@ async def submit_application(
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(
     register_data: PublicRegisterRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Self-serve signup — instantly provisions a Client (no admin review)
@@ -59,6 +79,17 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Необходимо принять пользовательское соглашение и политику обработки персональных данных",
         )
+    if is_disposable_email(register_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Используйте постоянный email, не одноразовый ящик",
+        )
+    if captcha_configured():
+        ok = await verify_smartcaptcha(register_data.captcha_token or "", client_ip(request))
+        if not ok:
+            raise HTTPException(status_code=400, detail="Подтвердите, что вы не робот")
+
+    must_verify = smtp_configured()
     client = await provision_client(
         db,
         user_email=register_data.email,
@@ -69,11 +100,16 @@ async def register(
         discount_percent=0,
         subscription_plan=SubscriptionPlan.BASIC,
         initial_credits=settings.SELF_SERVE_FREE_CREDITS,
+        email_verified=not must_verify,
     )
     client.terms_accepted_at = datetime.utcnow()
     client.marketing_opt_in = register_data.marketing_opt_in
     await db.commit()
     await db.refresh(client)
+
+    if must_verify:
+        token = create_email_verify_token(client.user_id)
+        send_verification_email(register_data.email, token)
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -81,7 +117,32 @@ async def register(
         expires_delta=access_token_expires,
         additional_claims={"role": "client"},
     )
-    return Token(access_token=access_token)
+    return Token(access_token=access_token, email_verified=not must_verify)
+
+
+@router.get("/antispam")
+async def antispam_public_config():
+    """Frontend bootstrap: whether captcha / email verification are live."""
+    return {
+        "captcha_enabled": captcha_configured(),
+        "site_key": (settings.YANDEX_SMARTCAPTCHA_CLIENT_KEY or "") if captcha_configured() else "",
+        "email_verification_enabled": smtp_configured(),
+    }
+
+
+@router.get("/verify-email")
+async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
+    user_id = parse_email_verify_token(token)
+    dest = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/dashboard"
+    if not user_id:
+        return RedirectResponse(f"{dest}?verified=invalid", status_code=302)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        return RedirectResponse(f"{dest}?verified=invalid", status_code=302)
+    user.email_verified = True
+    await db.commit()
+    return RedirectResponse(f"{dest}?verified=ok", status_code=302)
 
 
 @router.post("/payments/webhook")

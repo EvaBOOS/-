@@ -65,6 +65,7 @@
                             Хочу получать информационные и рекламные сообщения
                         </label>
                     </div>
+                    <div id="register-captcha" class="captcha-slot"></div>
                     <button type="submit" class="btn btn-primary btn-block">Создать аккаунт</button>
                     <p id="register-error" class="error-message"></p>
                     <p class="auth-switch">Уже есть аккаунт? <button type="button" id="show-login-btn" class="link-btn">Войти</button></p>
@@ -108,6 +109,11 @@
                         <span id="company-name">Моя компания</span>
                     </div>
                 </header>
+                <div id="email-verify-banner" class="verify-banner" hidden>
+                    Подтвердите почту, чтобы запускать ролики.
+                    <button type="button" id="resend-verify-btn" class="link-btn">Отправить письмо ещё раз</button>
+                    <span id="resend-verify-msg" class="hint"></span>
+                </div>
 
                 <div id="page-generate" class="page active">
                     <div class="generate-container">

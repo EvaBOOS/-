@@ -397,7 +397,13 @@ def provider_nsfw_score(frame_path: str | Path) -> float:
 
 
 def provider_csam_scan(frames: Iterable[str | Path]) -> bool:
-    """PhotoDNA / Cloudflare CSAM Scanning Tool only. Never an LLM. Stub until access is granted."""
+    """PhotoDNA / Cloudflare CSAM Scanning Tool only. Never an LLM.
+
+    Apply for access (not instant):
+    - Microsoft PhotoDNA: https://www.microsoft.com/en-us/photodna
+    - Cloudflare CSAM Scanning Tool: https://www.cloudflare.com/trust-hub/child-safety/
+    Stub until credentials exist.
+    """
     return False
 
 

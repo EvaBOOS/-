@@ -17,6 +17,7 @@ from app.models.generation import GenerationStatus, VideoGeneration
 from app.models.moderation import BlockedFileHash, ModerationEvent
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
+from app.services.antispam import is_disposable_email, smtp_configured
 from app.services.moderation.gate import (
     RULES,
     Action,
@@ -50,12 +51,6 @@ CATEGORY_MESSAGES = {
     "HATE": "Ролик отправлен на проверку.",
     "SPAM": "Слишком много однотипных задач.",
     "CSAE": "Аккаунт заблокирован.",
-}
-
-DISPOSABLE_DOMAINS = {
-    "mailinator.com", "guerrillamail.com", "tempmail.com", "10minutemail.com",
-    "throwaway.email", "yopmail.com", "trashmail.com", "getnada.com",
-    "temp-mail.org", "sharklasers.com",
 }
 
 KIND_BY_MODE = {
@@ -158,10 +153,15 @@ async def gather_account_signals(
     )
 
     email = ""
+    verified = True
     if client.user_id:
-        u = await db.execute(select(User.email).where(User.id == client.user_id))
-        email = (u.scalar() or "").lower()
-    domain = email.rsplit("@", 1)[-1] if "@" in email else ""
+        u = await db.execute(select(User).where(User.id == client.user_id))
+        user = u.scalar_one_or_none()
+        if user:
+            email = (user.email or "").lower()
+            verified = bool(getattr(user, "email_verified", True))
+    if not smtp_configured():
+        verified = True
 
     same_fp = 1
     if fingerprint:
@@ -172,13 +172,13 @@ async def gather_account_signals(
 
     return AccountSignals(
         account_age_hours=age_hours,
-        email_verified=True,
+        email_verified=verified,
         tasks_last_hour=int(hour_q.scalar() or 0),
         tasks_last_day=int(day_q.scalar() or 0),
         distinct_accounts_same_fingerprint=same_fp,
         strikes_90d=strikes,
         is_paying=is_paying,
-        disposable_email=domain in DISPOSABLE_DOMAINS,
+        disposable_email=is_disposable_email(email),
     )
 
 
@@ -333,6 +333,11 @@ async def preflight(
         return Verdict(stage="G0")
 
     signals = await gather_account_signals(db, client, fingerprint=fingerprint)
+    if smtp_configured() and not signals.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Подтвердите почту — ссылка в письме. Повторная отправка в профиле.",
+        )
     v = check_account(signals)
     if v.action == Action.BAN:
         await persist_event(db, generation=None, client=client, verdict=v)
@@ -346,6 +351,14 @@ async def preflight(
     v = v.merge(text_v)
     if source_url:
         v = v.merge(check_source_link(source_url, user_confirmed_rights=rights_confirmed))
+
+    from app.services.antispam import duplicate_count, input_fingerprint
+
+    dup_n = duplicate_count(client.id, input_fingerprint(text=text, file_sha=""))
+    if dup_n >= 5:
+        v = v.merge(Verdict(Action.HOLD, ["SPAM"], reason="повторяющийся вход", stage="G0"))
+    elif dup_n >= 3:
+        v = v.merge(Verdict(Action.FLAG, ["SPAM"], reason="повторяющийся вход", stage="G0"))
 
     if v.action == Action.BAN:
         await persist_event(db, generation=None, client=client, verdict=v)

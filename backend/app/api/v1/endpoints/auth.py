@@ -43,7 +43,7 @@ async def login(
         additional_claims={"role": user.role.value}
     )
     
-    return Token(access_token=access_token)
+    return Token(access_token=access_token, email_verified=bool(getattr(user, "email_verified", True)))
 
 
 @router.get("/me", response_model=UserResponse)

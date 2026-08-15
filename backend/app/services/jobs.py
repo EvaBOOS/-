@@ -37,6 +37,7 @@ def enqueue_job(
     generation_id: int,
     client_id: int,
     local_coro_runner: Callable[..., Any],
+    countdown: int = 0,
 ) -> str:
     """
     Enqueue avatar | viral | clips | trend_study job.
@@ -60,12 +61,17 @@ def enqueue_job(
         task = mapping.get(kind)
         if not task:
             raise ValueError(f"Unknown job kind: {kind}")
-        async_result = task.delay(generation_id, client_id)
+        delay = max(0, int(countdown or 0))
+        if delay:
+            async_result = task.apply_async(args=(generation_id, client_id), countdown=delay)
+        else:
+            async_result = task.delay(generation_id, client_id)
         logger.info(
-            "Enqueued %s via Celery id=%s entity=%s",
+            "Enqueued %s via Celery id=%s entity=%s delay=%s",
             kind,
             async_result.id,
             generation_id,
+            delay,
         )
         return "celery"
 

@@ -23,6 +23,12 @@ from app.services.clips_pipeline import AiClipsPipeline
 from app.services.jobs import enqueue_job
 from app.services.media_ingest import MediaIngestError, validate_public_http_url
 from app.services.moderation.runtime import apply_preflight_to_generation, preflight
+from app.services.antispam import (
+    create_email_verify_token,
+    new_account_delay_seconds,
+    send_verification_email,
+    smtp_configured,
+)
 from datetime import datetime
 
 router = APIRouter()
@@ -132,10 +138,15 @@ def _fingerprint(x_device_fingerprint: Optional[str] = Header(None)) -> str:
 
 @router.get("/profile", response_model=ClientResponse)
 async def get_profile(
-    client: Client = Depends(get_current_client)
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get current client's profile."""
-    return client
+    result = await db.execute(select(User).where(User.id == client.user_id))
+    user = result.scalar_one_or_none()
+    data = ClientResponse.model_validate(client)
+    data.email_verified = bool(getattr(user, "email_verified", True)) if user else True
+    return data
 
 
 @router.post("/deactivate")
@@ -151,6 +162,23 @@ async def deactivate_account(
     client.is_active = False
     await db.commit()
     return {"message": "Аккаунт деактивирован"}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    if not smtp_configured():
+        raise HTTPException(status_code=400, detail="Подтверждение почты сейчас не требуется")
+    result = await db.execute(select(User).where(User.id == client.user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.email_verified:
+        return {"message": "Почта уже подтверждена"}
+    send_verification_email(user.email, create_email_verify_token(user.id))
+    return {"message": "Письмо отправлено"}
 
 
 @router.get("/branding", response_model=ClientBrandingResponse)
@@ -244,6 +272,7 @@ async def create_generation(
             generation.id,
             client.id,
             process_video_generation,
+            countdown=new_account_delay_seconds(client),
         )
 
     return generation
@@ -381,6 +410,7 @@ async def create_viral_edit(
             generation.id,
             client.id,
             process_viral_edit,
+            countdown=new_account_delay_seconds(client),
         )
     return generation
 
@@ -473,6 +503,7 @@ async def create_ai_clips(
             generation.id,
             client.id,
             process_ai_clips,
+            countdown=new_account_delay_seconds(client),
         )
     return generation
 

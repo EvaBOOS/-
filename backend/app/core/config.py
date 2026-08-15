@@ -123,6 +123,20 @@ class Settings(BaseSettings):
     # Third-party source longer than this (seconds) goes to manual COPY hold.
     MODERATION_MOVIE_SECONDS: int = 5400
 
+    # Email verification (optional — skipped unless SMTP_HOST is set)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = "LoudCut <noreply@loudcut.ru>"
+
+    # Yandex SmartCaptcha (optional — skipped unless both keys are set)
+    YANDEX_SMARTCAPTCHA_CLIENT_KEY: Optional[str] = None
+    YANDEX_SMARTCAPTCHA_SERVER_KEY: Optional[str] = None
+
+    # Delay free new accounts in the worker queue (seconds). 0 = off.
+    NEW_ACCOUNT_JOB_DELAY_SECONDS: int = 45
+
     class Config:
         env_file = ".env"
         case_sensitive = True

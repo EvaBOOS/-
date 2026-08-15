@@ -58,7 +58,7 @@ async function login(email, password) {
     return data;
 }
 
-async function registerAccount(fullName, email, password, acceptedTerms, marketingOptIn) {
+async function registerAccount(fullName, email, password, acceptedTerms, marketingOptIn, captchaToken = '') {
     const response = await fetch(`${API_BASE}/public/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,8 +67,9 @@ async function registerAccount(fullName, email, password, acceptedTerms, marketi
             email,
             password,
             accepted_terms: acceptedTerms,
-            marketing_opt_in: marketingOptIn
-        })
+            marketing_opt_in: marketingOptIn,
+            captcha_token: captchaToken || null,
+        }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -107,6 +108,8 @@ async function checkAuth() {
         currentClient = await api('/client/profile');
         updateCreditsDisplay();
         document.getElementById('company-name').textContent = currentClient.company_name || 'Моя компания';
+        const banner = document.getElementById('email-verify-banner');
+        if (banner) banner.hidden = currentClient.email_verified !== false;
         
         return true;
     } catch (e) {
@@ -1328,9 +1331,55 @@ function initVideoUploadWidgets() {
     }
 }
 
+}
+
+async function mountSmartCaptcha(containerId) {
+    window.__lcCaptchaToken = '';
+    try {
+        const cfg = await fetch(`${API_BASE}/public/antispam`).then((r) => r.json());
+        if (!cfg.captcha_enabled || !cfg.site_key) return;
+        const box = document.getElementById(containerId);
+        if (!box) return;
+        if (!window.smartCaptcha) {
+            await new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://smartcaptcha.yandexcloud.net/captcha.js';
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        }
+        if (window.smartCaptcha && window.smartCaptcha.render) {
+            window.smartCaptcha.render(box, {
+                sitekey: cfg.site_key,
+                callback: (token) => { window.__lcCaptchaToken = token; },
+            });
+        }
+    } catch (e) {
+        console.warn('captcha init', e);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     enhanceCustomSelects();
     initVideoUploadWidgets();
+    mountSmartCaptcha('register-captcha');
+    const verified = new URLSearchParams(location.search).get('verified');
+    if (verified === 'ok') {
+        const banner = document.getElementById('email-verify-banner');
+        if (banner) {
+            banner.hidden = true;
+        }
+    }
+    document.getElementById('resend-verify-btn')?.addEventListener('click', async () => {
+        const msg = document.getElementById('resend-verify-msg');
+        try {
+            const data = await api('/client/resend-verification', { method: 'POST' });
+            if (msg) msg.textContent = data.message || 'Отправлено';
+        } catch (e) {
+            if (msg) msg.textContent = e.message;
+        }
+    });
     const isAuthenticated = await checkAuth();
     if (isAuthenticated) {
         showScreen('dashboard');
@@ -1386,7 +1435,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const errorEl = document.getElementById('register-error');
 
         try {
-            await registerAccount(fullName, email, password, acceptedTerms, marketingOptIn);
+            await registerAccount(fullName, email, password, acceptedTerms, marketingOptIn, window.__lcCaptchaToken || '');
             const isClient = await checkAuth();
             if (isClient) {
                 showScreen('dashboard');

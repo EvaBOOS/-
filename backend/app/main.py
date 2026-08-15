@@ -46,7 +46,8 @@ async def create_default_admin():
                 hashed_password=get_password_hash(settings.FIRST_ADMIN_PASSWORD),
                 full_name="Administrator",
                 role=UserRole.ADMIN,
-                is_active=True
+                is_active=True,
+                email_verified=True,
             )
             db.add(admin)
             await db.commit()
