@@ -1,0 +1,127 @@
+{
+  "version": "1.0",
+  "updated": "2026-08-13",
+  "actions": {
+    "allow": "пропустить",
+    "flag": "пропустить, но пометить и положить в выборку для аудита",
+    "hold": "остановить задачу, отправить в очередь ручной модерации",
+    "block": "отказать пользователю, вернуть токены, записать в лог",
+    "ban": "отказать, заблокировать аккаунт, эскалация ответственному"
+  },
+  "categories": [
+    {
+      "code": "CSAE",
+      "title": "Сексуальный контент с несовершеннолетними",
+      "severity": "critical",
+      "action": "ban",
+      "auto_review": false,
+      "notes": "Нулевая терпимость. Контент не хранить и не пересылать, сохранять только хеш и метаданные. Проверку выполнять хеш-матчингом и специализированным сервисом, не LLM-классификатором.",
+      "signals": ["hash_match_csam", "nsfw_score_high AND age_estimate_minor", "prompt_intent_minor_sexual"]
+    },
+    {
+      "code": "TERR",
+      "title": "Терроризм и экстремизм",
+      "severity": "critical",
+      "action": "block",
+      "auto_review": true,
+      "notes": "Пропаганда, вербовка, символика запрещённых организаций, призывы к насилию.",
+      "signals": ["text_class_terrorism", "text_class_extremism", "banned_org_mentions_positive"]
+    },
+    {
+      "code": "DRUG",
+      "title": "Наркотики",
+      "severity": "high",
+      "action": "block",
+      "auto_review": true,
+      "notes": "Продажа, реклама, инструкции по изготовлению, сленг закладок. Обзоры и профилактика — hold при сомнении.",
+      "signals": ["text_class_drugs", "slang_dictionary_hit", "contact_for_sale_pattern"]
+    },
+    {
+      "code": "FRAUD",
+      "title": "Мошенничество",
+      "severity": "high",
+      "action": "block",
+      "auto_review": true,
+      "notes": "Финансовые пирамиды, гарантированный доход, фишинг, поддельные розыгрыши.",
+      "signals": ["text_class_scam", "guaranteed_income_pattern", "telegram_invite_plus_money_claim"]
+    },
+    {
+      "code": "MALW",
+      "title": "Вредоносный контент и вредоносные инструкции",
+      "severity": "high",
+      "action": "block",
+      "auto_review": true,
+      "notes": "Инструкции по взлому, вредоносное ПО, оружие, причинение вреда.",
+      "signals": ["text_class_illicit_instructions", "text_class_weapons", "text_class_selfharm_instructions"]
+    },
+    {
+      "code": "ILLEG",
+      "title": "Иная незаконная деятельность",
+      "severity": "high",
+      "action": "block",
+      "auto_review": true,
+      "notes": "Оружие, поддельные документы, незаконные услуги, обнал.",
+      "signals": ["text_class_illicit_goods", "document_forgery_pattern"]
+    },
+    {
+      "code": "COPY",
+      "title": "Нарушение авторских прав",
+      "severity": "medium",
+      "action": "hold",
+      "auto_review": true,
+      "notes": "Чужой фильм/сериал/трансляция, ссылка без прав, длинный исходник.",
+      "signals": ["source_is_third_party_channel", "audio_fingerprint_match", "duration_over_threshold_movie"]
+    },
+    {
+      "code": "IMPER",
+      "title": "Impersonation и обманные дипфейки",
+      "severity": "high",
+      "action": "hold",
+      "auto_review": true,
+      "notes": "Выдача себя за человека, бренд или госорган; чужое лицо или голос без согласия.",
+      "signals": ["face_not_matching_account_consent", "public_figure_mentioned_as_speaker", "voice_clone_without_consent"]
+    },
+    {
+      "code": "SEX",
+      "title": "Сексуальный контент (взрослые)",
+      "severity": "medium",
+      "action": "block",
+      "auto_review": true,
+      "notes": "Отдельно от CSAE. Блокировать по правилам площадок Shorts/Reels/TikTok.",
+      "signals": ["nsfw_score_high", "text_class_sexual"]
+    },
+    {
+      "code": "HATE",
+      "title": "Разжигание ненависти и травля",
+      "severity": "medium",
+      "action": "hold",
+      "auto_review": true,
+      "notes": "Отдельно от экстремизма, чтобы не смешивать статистику.",
+      "signals": ["text_class_hate", "text_class_harassment"]
+    },
+    {
+      "code": "SPAM",
+      "title": "Спам и массовые накрутки",
+      "severity": "low",
+      "action": "flag",
+      "auto_review": false,
+      "notes": "Одинаковые ролики пачками, реф-ссылки, ботоводство. Лимиты, не бан контента.",
+      "signals": ["duplicate_input_hash", "burst_rate_exceeded", "referral_spam_pattern"]
+    }
+  ],
+  "strikes": {
+    "block": 1,
+    "ban_threshold": 3,
+    "window_days": 90,
+    "on_threshold": "заморозка аккаунта, ручной разбор, возможность апелляции",
+    "critical_categories_bypass_threshold": ["CSAE", "TERR"]
+  },
+  "thresholds": {
+    "text_model_block": 0.85,
+    "text_model_hold": 0.55,
+    "nsfw_frame_block": 0.90,
+    "nsfw_frame_hold": 0.65,
+    "frames_sampled_per_minute": 4,
+    "min_frames_flagged_to_trigger": 2
+  }
+}

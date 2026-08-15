@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoudCut — админ</title>
+    <link rel="icon" href="/favicon.ico" type="image/png">
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="192x192">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/admin/static/css/admin.css">
+</head>
+<body>
+    <div class="app-container">
+        <div id="login-screen" class="screen active">
+            <div class="login-atmosphere" aria-hidden="true">
+                <span class="trinket t1"></span>
+                <span class="trinket t2"></span>
+                <div class="fog fog-a"></div>
+                <div class="fog fog-b"></div>
+            </div>
+            <div class="login-stage">
+                <p class="brand-mark">LoudCut</p>
+                <h1 class="login-title">Панель<br>администратора</h1>
+                <p class="login-lead">Клиенты, кредиты, брендинг и аватары.</p>
+                <form id="login-form" class="login-form">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" required placeholder="admin@example.com" autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Пароль</label>
+                        <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Войти</button>
+                    <p id="login-error" class="error-message"></p>
+                </form>
+            </div>
+        </div>
+
+        <div id="dashboard-screen" class="screen">
+            <nav class="sidebar">
+                <div class="sidebar-header">
+                    <span class="logo-text">LoudCut</span>
+                    <span class="logo-tag">admin</span>
+                </div>
+                <ul class="nav-menu">
+                    <li class="nav-item active" data-page="overview"><span>Обзор</span></li>
+                    <li class="nav-item" data-page="clients"><span>Клиенты</span></li>
+                    <li class="nav-item" data-page="applications"><span>Заявки</span></li>
+                    <li class="nav-item" data-page="moderation"><span>Модерация</span></li>
+                    <li class="nav-item" data-page="create-client"><span>Новый клиент</span></li>
+                </ul>
+                <div class="sidebar-footer">
+                    <button id="logout-btn" class="btn btn-ghost">Выйти</button>
+                </div>
+            </nav>
+
+            <main class="main-content">
+                <header class="top-bar">
+                    <h2 id="page-title">Обзор</h2>
+                    <div class="user-info">
+                        <span id="user-email">admin@example.com</span>
+                    </div>
+                </header>
+
+                <!-- Overview Page -->
+                <div id="page-overview" class="page active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">01</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-clients">0</span>
+                                <span class="stat-label">Всего клиентов</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">02</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-active">0</span>
+                                <span class="stat-label">Активных</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">03</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-videos">0</span>
+                                <span class="stat-label">Видео создано</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">04</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-success">0%</span>
+                                <span class="stat-label">Успешность</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Clients List Page -->
+                <div id="page-clients" class="page">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Компания</th>
+                                    <th>Тип</th>
+                                    <th>Email</th>
+                                    <th>Тариф</th>
+                                    <th>Кредиты</th>
+                                    <th>Статус</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="clients-table-body">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Applications Page -->
+                <div id="page-applications" class="page">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Имя</th>
+                                    <th>Email</th>
+                                    <th>Тип</th>
+                                    <th>Компания / соцсети</th>
+                                    <th>Сообщение</th>
+                                    <th>Дата</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="applications-table-body">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Moderation queue -->
+                <div id="page-moderation" class="page">
+                    <div class="stats-grid" style="margin-bottom: 18px;">
+                        <div class="stat-card">
+                            <div class="stat-info">
+                                <span class="stat-value" id="mod-hold-open">0</span>
+                                <span class="stat-label">В очереди hold</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-info">
+                                <span class="stat-value" id="mod-hold-rate">0%</span>
+                                <span class="stat-label">Доля hold</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-info">
+                                <span class="stat-value" id="mod-overturn">0%</span>
+                                <span class="stat-label">Отмена решений</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Клиент</th>
+                                    <th>Режим</th>
+                                    <th>Категории</th>
+                                    <th>Причина</th>
+                                    <th>Фрагмент</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="moderation-table-body"></tbody>
+                        </table>
+                    </div>
+                    <h3 style="margin: 28px 0 12px;">Жалобы правообладателей</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>URL</th>
+                                    <th>Сообщение</th>
+                                    <th>Статус</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="complaints-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Create Client Page -->
+                <div id="page-create-client" class="page">
+                    <div class="form-card">
+                        <h3>Создание нового клиента</h3>
+                        <form id="create-client-form">
+                            <div class="form-section">
+                                <h4>Данные пользователя</h4>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="client-email">Email *</label>
+                                        <input type="email" id="client-email" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="client-password">Пароль *</label>
+                                        <input type="password" id="client-password" required minlength="8">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="client-name">Имя</label>
+                                        <input type="text" id="client-name">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="client-company">Компания / соцсети</label>
+                                        <input type="text" id="client-company">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="client-account-type">Тип аккаунта</label>
+                                        <div class="select-wrap">
+                                        <select id="client-account-type" class="select-ui">
+                                            <option value="company">Компания</option>
+                                            <option value="blogger">Блогер</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="client-discount">Скидка, %</label>
+                                        <input type="number" id="client-discount" min="0" max="100" value="0">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-offer-notes">Особые условия</label>
+                                    <textarea id="client-offer-notes" rows="2" placeholder="Индивидуальные договорённости, заметки для команды"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h4>Тарифный план</h4>
+                                <div class="plan-selector">
+                                    <label class="plan-option">
+                                        <input type="radio" name="plan" value="basic" checked>
+                                        <div class="plan-card">
+                                            <span class="plan-name">Basic</span>
+                                            <span class="plan-limit">15 видео/мес</span>
+                                        </div>
+                                    </label>
+                                    <label class="plan-option">
+                                        <input type="radio" name="plan" value="standard">
+                                        <div class="plan-card">
+                                            <span class="plan-name">Standard</span>
+                                            <span class="plan-limit">30 видео/мес</span>
+                                        </div>
+                                    </label>
+                                    <label class="plan-option">
+                                        <input type="radio" name="plan" value="premium">
+                                        <div class="plan-card">
+                                            <span class="plan-name">Premium</span>
+                                            <span class="plan-limit">60 видео/мес</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h4>AI настройки</h4>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="elevenlabs-voice">ElevenLabs Voice ID</label>
+                                        <input type="text" id="elevenlabs-voice" placeholder="21m00Tcm4TlvDq8ikWAM">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="heygen-avatar">HeyGen Avatar ID</label>
+                                        <input type="text" id="heygen-avatar" placeholder="josh_lite3_20230714">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Создать клиента</button>
+                            </div>
+                            <p id="create-error" class="error-message"></p>
+                            <p id="create-success" class="success-message"></p>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Approve Application Modal -->
+                <div id="approve-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Одобрить заявку</h3>
+                            <button class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="approve-form">
+                                <input type="hidden" id="approve-application-id">
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="text" id="approve-email" disabled>
+                                </div>
+                                <div class="form-group">
+                                    <label>Пароль для входа *</label>
+                                    <input type="password" id="approve-password" required minlength="8">
+                                </div>
+                                <div class="form-group">
+                                    <label>Компания / соцсети</label>
+                                    <input type="text" id="approve-company">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Тариф</label>
+                                        <div class="select-wrap">
+                                        <select id="approve-plan" class="select-ui">
+                                            <option value="basic">Basic (15 видео)</option>
+                                            <option value="standard">Standard (30 видео)</option>
+                                            <option value="premium">Premium (60 видео)</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Скидка, %</label>
+                                        <input type="number" id="approve-discount" min="0" max="100" value="0">
+                                    </div>
+                                </div>
+                                <p id="approve-error" class="error-message"></p>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary modal-cancel">Отмена</button>
+                            <button type="button" class="btn btn-primary" id="approve-submit-btn">Одобрить и создать клиента</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Client Detail Modal -->
+                <div id="client-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Настройки клиента</h3>
+                            <button class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="client-edit-form">
+                                <input type="hidden" id="edit-client-id">
+                                
+                                <div class="form-tabs">
+                                    <button type="button" class="tab-btn active" data-tab="general">Основное</button>
+                                    <button type="button" class="tab-btn" data-tab="branding">Брендинг</button>
+                                    <button type="button" class="tab-btn" data-tab="credits">Кредиты</button>
+                                </div>
+
+                                <!-- General Tab -->
+                                <div class="tab-content active" id="tab-general">
+                                    <div class="form-group">
+                                        <label>Компания</label>
+                                        <input type="text" id="edit-company">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Тип аккаунта</label>
+                                        <div class="select-wrap">
+                                        <select id="edit-account-type" class="select-ui">
+                                            <option value="company">Компания</option>
+                                            <option value="blogger">Блогер</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Скидка, %</label>
+                                        <input type="number" id="edit-discount" min="0" max="100">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Особые условия</label>
+                                        <textarea id="edit-offer-notes" rows="2" placeholder="Индивидуальные договорённости, заметки для команды"></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Тариф</label>
+                                        <div class="select-wrap">
+                                        <select id="edit-plan" class="select-ui">
+                                            <option value="basic">Basic (15 видео)</option>
+                                            <option value="standard">Standard (30 видео)</option>
+                                            <option value="premium">Premium (60 видео)</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>ElevenLabs Voice ID</label>
+                                        <input type="text" id="edit-voice">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>HeyGen Avatar ID</label>
+                                        <input type="text" id="edit-avatar">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" id="edit-active">
+                                            Активен
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Branding Tab -->
+                                <div class="tab-content" id="tab-branding">
+                                    <div class="form-group">
+                                        <label>Вотермарк (логотип)</label>
+                                        <input type="file" id="edit-watermark" accept="image/*">
+                                        <div id="current-watermark" class="preview-image"></div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Позиция вотермарка</label>
+                                        <div class="select-wrap">
+                                        <select id="edit-watermark-position" class="select-ui">
+                                            <option value="top_left">Сверху слева</option>
+                                            <option value="top_right">Сверху справа</option>
+                                            <option value="bottom_left">Снизу слева</option>
+                                            <option value="bottom_right">Снизу справа</option>
+                                        </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Шрифт субтитров (файл)</label>
+                                        <input type="file" id="edit-font" accept=".ttf,.otf">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Или из библиотеки Google Fonts</label>
+                                        <div class="select-wrap">
+                                        <select id="edit-library-font" class="select-ui">
+                                            <option value="">— авто по теме видео —</option>
+                                        </select>
+                                        </div>
+                                        <button type="button" id="apply-library-font-btn" class="btn btn-secondary" style="margin-top:8px">
+                                            Применить шрифт из библиотеки
+                                        </button>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Название шрифта</label>
+                                        <input type="text" id="edit-font-name" value="Arial">
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Размер шрифта</label>
+                                            <input type="number" id="edit-font-size" value="48" min="12" max="120">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Цвет шрифта</label>
+                                            <input type="color" id="edit-font-color" value="#FFFFFF">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Акцент важных слов</label>
+                                            <div class="select-wrap">
+                                            <select id="edit-emphasis-style" class="select-ui">
+                                                <option value="color">Обычная подсветка</option>
+                                                <option value="glow">Тёмное свечение</option>
+                                                <option value="none">Без акцента</option>
+                                            </select>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Цвет акцента</label>
+                                            <input type="color" id="edit-accent-color" value="#FFE500">
+                                            <p class="hint">Цвет выделения ключевых слов в субтитрах. По умолчанию — жёлтый; подберите под тематику роликов клиента.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Credits Tab -->
+                                <div class="tab-content" id="tab-credits">
+                                    <div class="credits-info">
+                                        <p>Текущий баланс: <strong id="current-credits">0</strong></p>
+                                        <p>Использовано в этом месяце: <strong id="used-credits">0</strong></p>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Добавить кредиты</label>
+                                        <div class="input-with-button">
+                                            <input type="number" id="add-credits-amount" min="1" value="10">
+                                            <button type="button" id="add-credits-btn" class="btn btn-secondary">Добавить</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <button type="button" id="reset-cycle-btn" class="btn btn-warning">
+                                            Сбросить цикл биллинга
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary modal-cancel">Отмена</button>
+                            <button type="button" class="btn btn-primary" id="save-client-btn">Сохранить</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/admin/static/js/admin.js"></script>
+</body>
+</html>
