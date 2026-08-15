@@ -88,14 +88,60 @@
                 </li>
                 <li id="c5">
                     <h2>Ограничения и блокировки</h2>
-                    <p>Основания для приостановки или блокировки аккаунта, включая нарушение правил допустимого использования.</p>
+                    <p>Сервис вправе приостановить обработку, отказать в генерации и заблокировать аккаунт при нарушении правил. Токен за отклонённую модерацией задачу не списывается.</p>
+                    <p>Запрещённый контент включает, в частности:</p>
+                    <ol class="sub-clauses">
+                        <li>терроризм и экстремизм;</li>
+                        <li>наркотики (продажа, реклама, инструкции по изготовлению);</li>
+                        <li>сексуальный контент с участием несовершеннолетних — нулевая терпимость, немедленная блокировка;</li>
+                        <li>порнография и откровенный сексуальный контент;</li>
+                        <li>мошенничество и финансовые пирамиды;</li>
+                        <li>вредоносное ПО и инструкции по причинению вреда;</li>
+                        <li>иную незаконную деятельность;</li>
+                        <li>нарушение авторских прав;</li>
+                        <li>выдачу себя за другое лицо, бренд или госорган; обманные дипфейки.</li>
+                    </ol>
+                    <p>Три нарушения за 90 дней ведут к заморозке аккаунта с ручным разбором. Категории терроризма и сексуального контента с несовершеннолетними блокируют аккаунт сразу. Решение модерации можно оспорить в кабинете кнопкой «Оспорить».</p>
                 </li>
                 <li id="c6">
                     <h2>Права на загружаемый и созданный контент</h2>
                     <ol class="sub-clauses">
-                        <li>Права пользователя на исходные материалы и на результат генерации.</li>
-                        <li>Гарантии пользователя о наличии прав на загружаемые материалы.</li>
+                        <li>Пользователь подтверждает, что имеет права на загружаемые материалы и ссылки, и несёт за это ответственность.</li>
+                        <li>При вставке ссылки задача не стартует без явного подтверждения прав. Факт и время подтверждения логируются.</li>
+                        <li>Правообладатель может направить обращение через форму ниже. Срок ответа — 7 рабочих дней.</li>
+                        <li>Права на результат генерации принадлежат пользователю в пределах лицензии на сервис, за исключением материалов третьих лиц.</li>
                     </ol>
+                    <form id="rights-complaint-form" class="doc-form" style="margin-top:16px;display:grid;gap:10px;max-width:420px;">
+                        <p><strong>Обращение правообладателя</strong></p>
+                        <input type="email" name="email" required placeholder="Email для ответа" style="padding:8px;">
+                        <input type="url" name="source_url" placeholder="URL ролика (если есть)" style="padding:8px;">
+                        <textarea name="message" required minlength="10" rows="4" placeholder="Опишите нарушение" style="padding:8px;"></textarea>
+                        <button type="submit">Отправить</button>
+                        <p id="rights-complaint-status" class="hint"></p>
+                    </form>
+                    <script>
+                    document.getElementById('rights-complaint-form')?.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        const status = document.getElementById('rights-complaint-status');
+                        status.textContent = 'Отправка…';
+                        try {
+                            const res = await fetch('/api/v1/public/rights-complaint', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    email: fd.get('email'),
+                                    source_url: fd.get('source_url') || null,
+                                    message: fd.get('message'),
+                                }),
+                            });
+                            const data = await res.json();
+                            status.textContent = res.ok ? (data.message || 'Принято') : (data.detail || 'Ошибка');
+                        } catch (err) {
+                            status.textContent = 'Не удалось отправить';
+                        }
+                    });
+                    </script>
                 </li>
                 <li id="c7">
                     <h2>AI-контент и сторонние AI-сервисы</h2>

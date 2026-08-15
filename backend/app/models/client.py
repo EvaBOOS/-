@@ -65,6 +65,10 @@ class Client(Base):
     terms_accepted_at = Column(DateTime(timezone=True), nullable=True)
     marketing_opt_in = Column(Boolean, default=False)
 
+    moderation_strikes = Column(Integer, default=0)
+    last_strike_at = Column(DateTime(timezone=True), nullable=True)
+    moderation_frozen_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

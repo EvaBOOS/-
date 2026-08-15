@@ -509,6 +509,8 @@
                             <option value="clipping">Нарезка клипов</option>
                             <option value="video_processing">Обработка</option>
                             <option value="completed">Готово</option>
+                            <option value="moderation_hold">На проверке</option>
+                            <option value="blocked">Отклонено</option>
                             <option value="failed">Ошибка</option>
                         </select>
                         </div>
@@ -663,6 +665,10 @@
                                     <h4>Ошибка</h4>
                                     <p id="modal-error" class="error-text"></p>
                                 </div>
+                                <div class="detail-section" id="appeal-section" style="display: none;">
+                                    <h4>Апелляция</h4>
+                                    <p class="hint">Если считаете, что сработал ложный фильтр — отправьте задачу на ручную проверку.</p>
+                                </div>
                                 <div class="detail-section" id="clips-section" style="display: none;">
                                     <h4>Клипы</h4>
                                     <ul id="modal-clips-list" class="steps-list"></ul>
@@ -683,6 +689,7 @@
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-ghost modal-close">Закрыть</button>
+                            <button type="button" id="appeal-btn" class="btn btn-ghost" style="display: none;">Оспорить</button>
                             <a id="download-btn" href="#" class="btn btn-primary" style="display: none;">Скачать MP4</a>
                         </div>
                     </div>

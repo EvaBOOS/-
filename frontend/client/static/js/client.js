@@ -4,11 +4,21 @@ let currentClient = null;
 let currentPage = 1;
 let pollingInterval = null;
 
+function deviceFingerprint() {
+    let fp = localStorage.getItem('lc_fp');
+    if (!fp) {
+        fp = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `lc-${Date.now()}`;
+        localStorage.setItem('lc_fp', fp);
+    }
+    return fp;
+}
+
 // API Helper
 async function api(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     const headers = {
         'Content-Type': 'application/json',
+        'X-Device-Fingerprint': deviceFingerprint(),
         ...options.headers
     };
     
@@ -321,7 +331,8 @@ function renderPagination(data) {
 
 function getStatusClass(status) {
     if (status === 'completed') return 'completed';
-    if (status === 'failed') return 'failed';
+    if (status === 'failed' || status === 'blocked') return 'failed';
+    if (status === 'moderation_hold') return 'hold';
     if (['script_generation', 'voice_synthesis', 'avatar_generation', 'transcription', 'viral_edit', 'clipping', 'video_processing'].includes(status)) return 'processing';
     return '';
 }
@@ -337,7 +348,9 @@ function getStatusIcon(status) {
         clipping: '✂️',
         video_processing: '🎬',
         completed: '✅',
-        failed: '❌'
+        failed: '❌',
+        moderation_hold: '🔍',
+        blocked: '⛔'
     };
     return icons[status] || '❓';
 }
@@ -353,7 +366,9 @@ function getStatusText(status) {
         clipping: 'Нарезка клипов',
         video_processing: 'Обработка видео',
         completed: 'Готово',
-        failed: 'Ошибка'
+        failed: 'Ошибка',
+        moderation_hold: 'На проверке',
+        blocked: 'Отклонено'
     };
     return texts[status] || status;
 }
@@ -393,7 +408,7 @@ async function submitViralEdit(
     formData.append('rights_confirmed', rightsConfirmed ? 'true' : 'false');
     formData.append('ai_disclosure_requested', aiDisclosureRequested ? 'true' : 'false');
     if (voiceoverText) formData.append('voiceover_text', voiceoverText);
-    const headers = {};
+    const headers = { 'X-Device-Fingerprint': deviceFingerprint() };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
     const response = await fetch(`${API_BASE}/client/viral-edit`, {
@@ -543,7 +558,7 @@ async function submitAiClips(file, language, maxClips = 5, fontId = '', sourceUr
     formData.append('rights_confirmed', rightsConfirmed ? 'true' : 'false');
     formData.append('ai_disclosure_requested', aiDisclosureRequested ? 'true' : 'false');
 
-    const headers = {};
+    const headers = { 'X-Device-Fingerprint': deviceFingerprint() };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
     const response = await fetch(`${API_BASE}/client/clips`, {
@@ -576,7 +591,7 @@ async function openGenerationModal(generationId) {
         renderGenerationModal(gen);
         document.getElementById('generation-modal').classList.add('active');
         
-        if (!['completed', 'failed'].includes(gen.status)) {
+        if (!['completed', 'failed', 'moderation_hold', 'blocked'].includes(gen.status)) {
             startPolling(generationId);
         }
     } catch (e) {
@@ -709,6 +724,19 @@ function renderGenerationModal(gen) {
     } else {
         errorSection.style.display = 'none';
     }
+
+    const appealSection = document.getElementById('appeal-section');
+    const appealBtn = document.getElementById('appeal-btn');
+    if (appealSection && appealBtn) {
+        const canAppeal = ['moderation_hold', 'blocked'].includes(gen.status)
+            && !gen.api_responses?.moderation?.appealed;
+        appealSection.style.display = canAppeal ? 'block' : 'none';
+        appealBtn.style.display = canAppeal ? 'inline-flex' : 'none';
+        appealBtn.onclick = (e) => {
+            e.preventDefault();
+            appealGeneration(gen.id);
+        };
+    }
     
     const videoSection = document.getElementById('video-section');
     const downloadBtn = document.getElementById('download-btn');
@@ -765,6 +793,20 @@ async function loadVideoPreview(generationId) {
     }
 }
 
+async function appealGeneration(generationId) {
+    const message = prompt('Коротко опишите, почему решение ошибочно (необязательно):') || '';
+    try {
+        await api(`/client/generations/${generationId}/appeal`, {
+            method: 'POST',
+            body: JSON.stringify({ message }),
+        });
+        alert('Апелляция отправлена. Обычно разбираем в течение рабочего дня.');
+        openGenerationModal(generationId);
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
 async function downloadGeneration(generationId) {
     try {
         const response = await fetch(`${API_BASE}/client/generations/${generationId}/download`, {
@@ -806,7 +848,7 @@ function startPolling(generationId) {
             const gen = await api(`/client/generations/${generationId}`);
             renderGenerationModal(gen);
             
-            if (['completed', 'failed'].includes(gen.status)) {
+            if (['completed', 'failed', 'moderation_hold', 'blocked'].includes(gen.status)) {
                 clearInterval(pollingInterval);
                 pollingInterval = null;
                 loadGenerations(currentPage);

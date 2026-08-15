@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     # Free trial tokens granted to a new self-serve signup (POST /public/register)
     SELF_SERVE_FREE_CREDITS: int = 3
 
+    # Content moderation (G0–G4). Disable only for local debugging.
+    MODERATION_ENABLED: bool = True
+    # Third-party source longer than this (seconds) goes to manual COPY hold.
+    MODERATION_MOVIE_SECONDS: int = 5400
+
     class Config:
         env_file = ".env"
         case_sensitive = True

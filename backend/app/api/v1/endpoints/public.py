@@ -1,7 +1,9 @@
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -126,3 +128,33 @@ async def yookassa_webhook(
     await db.commit()
 
     return {"status": "ok"}
+
+
+class RightsComplaintIn(BaseModel):
+    email: str = Field(..., max_length=255)
+    message: str = Field(..., min_length=10, max_length=4000)
+    source_url: Optional[str] = Field(None, max_length=1000)
+    generation_id: Optional[int] = None
+
+
+@router.post("/rights-complaint", status_code=status.HTTP_201_CREATED)
+async def submit_rights_complaint(
+    body: RightsComplaintIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Copyright / rights-holder notice. Logged for the takedown procedure."""
+    from app.models.moderation import RightsComplaint
+
+    email = (body.email or "").strip()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Укажите корректный email")
+    row = RightsComplaint(
+        email=email[:255],
+        source_url=(body.source_url or "").strip()[:1000] or None,
+        generation_id=body.generation_id,
+        message=body.message.strip()[:4000],
+        status="pending",
+    )
+    db.add(row)
+    await db.commit()
+    return {"message": "Обращение принято. Ответим в течение 7 рабочих дней."}

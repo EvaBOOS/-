@@ -22,6 +22,7 @@ from app.services.video.ffmpeg_service import FFmpegService
 from app.services.source_resolve import ensure_local_source
 from app.services.branding_watermark import resolve_export_watermark
 from app.services.video.content_presets import normalize_platform
+from app.services.moderation.runtime import ModerationHalt, run_g2, run_g3
 
 
 def _snap_to_word_boundary(t: float, words: list, edge: str, max_shift: float = 1.5) -> float:
@@ -88,6 +89,11 @@ class AiClipsPipeline:
         if not source:
             return None
 
+        try:
+            await run_g2(self.db, generation, client, source)
+        except ModerationHalt:
+            return None
+
         generation.started_at = datetime.utcnow()
         generation.api_responses = generation.api_responses or {}
         max_clips = int(
@@ -134,6 +140,8 @@ class AiClipsPipeline:
             if not text:
                 await self._fail(generation, "Не удалось распознать речь в длинном видео")
                 return None
+
+            await run_g3(self.db, generation, client, text)
 
             await self._update(generation, GenerationStatus.CLIPPING, progress=50)
             try:
@@ -350,6 +358,8 @@ class AiClipsPipeline:
             await self.db.commit()
             return best
 
+        except ModerationHalt:
+            return None
         except Exception as e:
             await self._fail(generation, str(e)[:500])
             return None

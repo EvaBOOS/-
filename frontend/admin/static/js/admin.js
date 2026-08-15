@@ -90,6 +90,7 @@ function showPage(pageName) {
         'overview': 'Обзор',
         'clients': 'Клиенты',
         'applications': 'Заявки',
+        'moderation': 'Модерация',
         'create-client': 'Новый клиент'
     };
     document.getElementById('page-title').textContent = titles[pageName] || pageName;
@@ -100,6 +101,8 @@ function showPage(pageName) {
         loadClients();
     } else if (pageName === 'applications') {
         loadApplications();
+    } else if (pageName === 'moderation') {
+        loadModeration();
     }
 }
 
@@ -143,6 +146,81 @@ function escapeHtml(str) {
 
 function escapeAttr(str) {
     return escapeHtml(str).replace(/'/g, '&#39;');
+}
+
+async function loadModeration() {
+    const tbody = document.getElementById('moderation-table-body');
+    const cbody = document.getElementById('complaints-table-body');
+    try {
+        const stats = await api('/admin/moderation/stats');
+        document.getElementById('mod-hold-open').textContent = stats.hold_open || 0;
+        document.getElementById('mod-hold-rate').textContent =
+            `${Math.round((stats.hold_rate || 0) * 1000) / 10}%`;
+        document.getElementById('mod-overturn').textContent =
+            `${Math.round((stats.overturn_rate || 0) * 1000) / 10}%`;
+
+        const queue = await api('/admin/moderation/queue');
+        const items = queue.items || [];
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="7">Очередь пуста</td></tr>';
+        } else {
+            tbody.innerHTML = items.map((g) => `
+                <tr>
+                    <td>#${g.id}${g.appealed ? ' · апелляция' : ''}</td>
+                    <td>${escapeHtml(g.company || '')}</td>
+                    <td>${escapeHtml(g.mode || '')}</td>
+                    <td>${escapeHtml((g.categories || []).join(', '))}</td>
+                    <td>${escapeHtml(g.reason || '')}</td>
+                    <td>${escapeHtml((g.snippet || '').slice(0, 180))}</td>
+                    <td>
+                        <button class="action-btn action-btn-edit" onclick="reviewHold(${g.id}, 'approve')">Пропустить</button>
+                        <button class="action-btn action-btn-danger" onclick="reviewHold(${g.id}, 'reject')">Отклонить</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        const complaints = await api('/admin/moderation/complaints');
+        const rows = complaints.items || [];
+        if (!rows.length) {
+            cbody.innerHTML = '<tr><td colspan="5">Жалоб нет</td></tr>';
+        } else {
+            cbody.innerHTML = rows.map((r) => `
+                <tr>
+                    <td>${escapeHtml(r.email)}</td>
+                    <td>${escapeHtml(r.source_url || '-')}</td>
+                    <td>${escapeHtml((r.message || '').slice(0, 200))}</td>
+                    <td>${escapeHtml(r.status || '')}</td>
+                    <td>${r.status === 'pending' ? `<button class="action-btn action-btn-edit" onclick="resolveComplaint(${r.id})">Закрыть</button>` : ''}</td>
+                </tr>
+            `).join('');
+        }
+    } catch (e) {
+        console.error('Failed to load moderation:', e);
+        tbody.innerHTML = `<tr><td colspan="7">${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+
+async function reviewHold(id, decision) {
+    if (!confirm(decision === 'approve' ? 'Пропустить задачу в обработку?' : 'Отклонить задачу?')) return;
+    try {
+        await api(`/admin/moderation/${id}/${decision}`, { method: 'POST', body: JSON.stringify({}) });
+        loadModeration();
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+async function resolveComplaint(id) {
+    try {
+        await api(`/admin/moderation/complaints/${id}`, {
+            method: 'POST',
+            body: JSON.stringify({ status: 'resolved', note: 'closed' }),
+        });
+        loadModeration();
+    } catch (e) {
+        alert(e.message);
+    }
 }
 
 function openApproveModal(applicationId, email, company) {

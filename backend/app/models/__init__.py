@@ -10,6 +10,7 @@ from .client import (
 from .payment import Payment, PaymentStatus
 from .generation import VideoGeneration, GenerationStatus, GenerationMode
 from .trend import TrendItem, TrendInsight
+from .moderation import ModerationEvent, BlockedFileHash, RightsComplaint
 
 __all__ = [
     "User",
@@ -26,4 +27,7 @@ __all__ = [
     "GenerationMode",
     "TrendItem",
     "TrendInsight",
+    "ModerationEvent",
+    "BlockedFileHash",
+    "RightsComplaint",
 ]

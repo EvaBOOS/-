@@ -23,6 +23,8 @@ class GenerationStatus(str, enum.Enum):
     VIDEO_PROCESSING = "video_processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    MODERATION_HOLD = "moderation_hold"
+    BLOCKED = "blocked"
 
 
 class VideoGeneration(Base):

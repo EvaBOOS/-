@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Form, Header
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -22,6 +22,8 @@ from app.services.viral_edit_pipeline import ViralEditPipeline
 from app.services.clips_pipeline import AiClipsPipeline
 from app.services.jobs import enqueue_job
 from app.services.media_ingest import MediaIngestError, validate_public_http_url
+from app.services.moderation.runtime import apply_preflight_to_generation, preflight
+from datetime import datetime
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -124,6 +126,10 @@ def _normalize_font_id(font_id: str) -> str:
     return font_norm
 
 
+def _fingerprint(x_device_fingerprint: Optional[str] = Header(None)) -> str:
+    return (x_device_fingerprint or "")[:80]
+
+
 @router.get("/profile", response_model=ClientResponse)
 async def get_profile(
     client: Client = Depends(get_current_client)
@@ -174,7 +180,8 @@ async def create_generation(
     generation_data: GenerationCreate,
     background_tasks: BackgroundTasks,
     client: Client = Depends(get_current_client),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    fingerprint: str = Depends(_fingerprint),
 ):
     """
     Submit a new video generation request.
@@ -191,6 +198,14 @@ async def create_generation(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="No credits remaining. Please contact admin to add more credits."
         )
+
+    verdict = await preflight(
+        db,
+        client,
+        text=generation_data.original_text,
+        fingerprint=fingerprint,
+        context="запрос пользователя (аватар)",
+    )
     
     # Create generation record
     from app.services.video.content_presets import normalize_genre
@@ -217,18 +232,20 @@ async def create_generation(
         api_responses=api_meta,
     )
     db.add(generation)
+    await db.flush()
+    may_run = await apply_preflight_to_generation(db, generation, client, verdict)
     await db.commit()
     await db.refresh(generation)
-    
-    # Start background processing (Celery in prod, BackgroundTasks locally)
-    enqueue_job(
-        background_tasks,
-        "avatar",
-        generation.id,
-        client.id,
-        process_video_generation,
-    )
-    
+
+    if may_run:
+        enqueue_job(
+            background_tasks,
+            "avatar",
+            generation.id,
+            client.id,
+            process_video_generation,
+        )
+
     return generation
 
 
@@ -254,6 +271,7 @@ async def create_viral_edit(
     ai_disclosure_requested: bool = Form(False),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
+    fingerprint: str = Depends(_fingerprint),
 ):
     """
     Upload a talking-head / raw clip (or paste a public URL) and run the viral-edit pipeline:
@@ -306,6 +324,16 @@ async def create_viral_edit(
     if music_mode_norm not in {"auto", "off"}:
         music_mode_norm = "auto"
 
+    verdict = await preflight(
+        db,
+        client,
+        text=vo_norm,
+        source_url=(source_url or "").strip(),
+        rights_confirmed=bool(rights_confirmed),
+        fingerprint=fingerprint,
+        context="вирусный монтаж",
+    )
+
     saved_path, display_name, validated_url = await _save_upload_or_url(
         file=file,
         source_url=source_url,
@@ -336,20 +364,24 @@ async def create_viral_edit(
             "kinetic_subtitles": bool(kinetic_subtitles),
             "volumetric_hook": bool(volumetric_hook),
             "rights_confirmed": bool(rights_confirmed),
+            "rights_confirmed_at": datetime.utcnow().isoformat() if rights_confirmed else None,
             "ai_disclosure_requested": bool(ai_disclosure_requested),
         },
     )
     db.add(generation)
+    await db.flush()
+    may_run = await apply_preflight_to_generation(db, generation, client, verdict)
     await db.commit()
     await db.refresh(generation)
 
-    enqueue_job(
-        background_tasks,
-        "viral",
-        generation.id,
-        client.id,
-        process_viral_edit,
-    )
+    if may_run:
+        enqueue_job(
+            background_tasks,
+            "viral",
+            generation.id,
+            client.id,
+            process_viral_edit,
+        )
     return generation
 
 
@@ -368,6 +400,7 @@ async def create_ai_clips(
     ai_disclosure_requested: bool = Form(False),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
+    fingerprint: str = Depends(_fingerprint),
 ):
     """
     Upload a long video (or paste a public URL); AI finds highlight moments and exports Shorts clips.
@@ -389,6 +422,16 @@ async def create_ai_clips(
     clips_n = max(1, min(int(max_clips or 5), settings.AI_CLIPS_MAX_COUNT))
     font_norm = _normalize_font_id(font_id)
     platform_norm = normalize_platform(platform)
+
+    verdict = await preflight(
+        db,
+        client,
+        text="",
+        source_url=(source_url or "").strip(),
+        rights_confirmed=bool(rights_confirmed),
+        fingerprint=fingerprint,
+        context="AI-клипы",
+    )
 
     saved_path, display_name, validated_url = await _save_upload_or_url(
         file=file,
@@ -413,20 +456,24 @@ async def create_ai_clips(
             "kinetic_subtitles": bool(kinetic_subtitles),
             "volumetric_hook": bool(volumetric_hook),
             "rights_confirmed": bool(rights_confirmed),
+            "rights_confirmed_at": datetime.utcnow().isoformat() if rights_confirmed else None,
             "ai_disclosure_requested": bool(ai_disclosure_requested),
         },
     )
     db.add(generation)
+    await db.flush()
+    may_run = await apply_preflight_to_generation(db, generation, client, verdict)
     await db.commit()
     await db.refresh(generation)
 
-    enqueue_job(
-        background_tasks,
-        "clips",
-        generation.id,
-        client.id,
-        process_ai_clips,
-    )
+    if may_run:
+        enqueue_job(
+            background_tasks,
+            "clips",
+            generation.id,
+            client.id,
+            process_ai_clips,
+        )
     return generation
 
 
@@ -676,7 +723,12 @@ async def cancel_generation(
             detail="Generation not found"
         )
     
-    if generation.status not in [GenerationStatus.PENDING, GenerationStatus.FAILED]:
+    if generation.status not in [
+        GenerationStatus.PENDING,
+        GenerationStatus.FAILED,
+        GenerationStatus.MODERATION_HOLD,
+        GenerationStatus.BLOCKED,
+    ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Can only cancel pending or failed generations"
@@ -686,6 +738,50 @@ async def cancel_generation(
     await db.commit()
     
     return {"message": "Generation cancelled"}
+
+
+@router.post("/generations/{generation_id}/appeal")
+async def appeal_generation(
+    generation_id: int,
+    payload: dict,
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """User contest of a hold/block. One appeal per job."""
+    result = await db.execute(
+        select(VideoGeneration).where(
+            VideoGeneration.id == generation_id,
+            VideoGeneration.client_id == client.id,
+        )
+    )
+    generation = result.scalar_one_or_none()
+    if not generation:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if generation.status not in (GenerationStatus.MODERATION_HOLD, GenerationStatus.BLOCKED):
+        raise HTTPException(status_code=400, detail="Оспорить можно только задачу на проверке или отклонённую")
+
+    from app.models.moderation import ModerationEvent
+
+    ev = await db.execute(
+        select(ModerationEvent)
+        .where(ModerationEvent.generation_id == generation.id)
+        .order_by(ModerationEvent.id.desc())
+        .limit(1)
+    )
+    event = ev.scalar_one_or_none()
+    if event and event.appealed:
+        raise HTTPException(status_code=400, detail="Апелляция уже отправлена")
+    if event:
+        event.appealed = True
+        event.appeal_text = str((payload or {}).get("message") or "")[:2000]
+        event.appealed_at = datetime.utcnow()
+    generation.api_responses = generation.api_responses or {}
+    generation.api_responses["moderation"] = {
+        **(generation.api_responses.get("moderation") or {}),
+        "appealed": True,
+    }
+    await db.commit()
+    return {"message": "Апелляция принята. Решение придёт после ручной проверки."}
 
 
 @router.get("/credits")

@@ -72,3 +72,28 @@ def enqueue_job(
     background_tasks.add_task(local_coro_runner, generation_id, client_id)
     logger.info("Enqueued %s via BackgroundTasks entity=%s", kind, generation_id)
     return "background"
+
+
+def requeue_generation(
+    kind: str,
+    generation_id: int,
+    client_id: int,
+    background_tasks: BackgroundTasks,
+) -> str:
+    """Re-enqueue after a moderator approves a hold. Lazy-imports runners to avoid cycles."""
+    from app.api.v1.endpoints.client import (
+        process_ai_clips,
+        process_video_generation,
+        process_viral_edit,
+    )
+
+    runners = {
+        "avatar": process_video_generation,
+        "viral": process_viral_edit,
+        "clips": process_ai_clips,
+    }
+    runner = runners.get(kind)
+    if not runner:
+        raise ValueError(f"Unknown job kind: {kind}")
+    return enqueue_job(background_tasks, kind, generation_id, client_id, runner)
+

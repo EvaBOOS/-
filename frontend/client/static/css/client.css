@@ -854,6 +854,8 @@ input[type="color"]::-webkit-color-swatch {
 
 .status-completed { background: var(--lime); }
 .status-failed { background: #ffb4a8; }
+.status-blocked { background: #ffb4a8; }
+.status-moderation_hold { background: #ffe08a; }
 .status-avatar_generation,
 .status-script_generation,
 .status-voice_synthesis,

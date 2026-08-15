@@ -108,6 +108,22 @@ class TrendStudyPipeline:
                 await self._fail(insight, "Не удалось распознать речь в ролике")
                 return None
 
+            from app.services.moderation.gate import Action, check_text
+            from app.services.moderation.runtime import user_message
+
+            g3 = await check_text(text, stage="G3", context="речь в тренд-ролике")
+            if g3.blocking:
+                if "CSAE" in g3.categories:
+                    _wipe_file = insight.source_video_path
+                    insight.source_video_path = None
+                    try:
+                        if _wipe_file and os.path.isfile(_wipe_file):
+                            os.remove(_wipe_file)
+                    except OSError:
+                        pass
+                await self._fail(insight, user_message(g3))
+                return None
+
             words = transcript.get("words") or []
             if duration <= 0:
                 duration = float(transcript.get("duration") or 0)

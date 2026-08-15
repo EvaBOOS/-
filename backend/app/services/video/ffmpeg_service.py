@@ -97,6 +97,33 @@ class FFmpegService:
         data = json.loads(result.stdout)
         duration = float(data.get("format", {}).get("duration", 0))
         return duration
+
+    def extract_moderation_frames(
+        self,
+        video_path: str,
+        output_dir: str,
+        per_minute: int = 4,
+    ) -> list:
+        duration = float(self.get_video_duration(video_path) or 0)
+        os.makedirs(output_dir, exist_ok=True)
+        stamps = {0.0}
+        if duration > 0.2:
+            stamps.add(max(0.0, duration - 0.15))
+        n = max(0, int(duration / 60.0 * max(1, per_minute)))
+        for i in range(1, n + 1):
+            t = duration * i / (n + 1)
+            stamps.add(round(t, 3))
+        paths = []
+        for i, ts in enumerate(sorted(stamps)):
+            out = os.path.join(output_dir, f"f{i:03d}.jpg")
+            cmd = [
+                self.ffmpeg_bin, "-y", "-ss", f"{ts:.3f}", "-i", video_path,
+                "-frames:v", "1", "-q:v", "4", out,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0 and os.path.isfile(out):
+                paths.append(out)
+        return paths
     
     def get_audio_duration(self, audio_path: str) -> float:
         """Get audio duration in seconds using ffprobe."""

@@ -30,6 +30,9 @@ async def ensure_schema_patches(engine: AsyncEngine, database_url: str) -> None:
         ("clients", "terms_accepted_at", _dt_type),
         ("clients", "marketing_opt_in", "BOOLEAN DEFAULT FALSE"),
         ("client_applications", "terms_accepted_at", _dt_type),
+        ("clients", "moderation_strikes", "INTEGER DEFAULT 0"),
+        ("clients", "last_strike_at", _dt_type),
+        ("clients", "moderation_frozen_at", _dt_type),
     ]
 
     async with engine.begin() as conn:
@@ -40,6 +43,42 @@ async def ensure_schema_patches(engine: AsyncEngine, database_url: str) -> None:
             await conn.execute(
                 text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
             )
+
+    if not is_sqlite:
+        conn = await engine.connect()
+        try:
+            conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await _ensure_pg_enum_values(
+                conn,
+                ["generationstatus", "generation_status"],
+                ["moderation_hold", "blocked", "MODERATION_HOLD", "BLOCKED"],
+            )
+        finally:
+            await conn.close()
+
+
+async def _ensure_pg_enum_values(conn, type_names: list[str], values: list[str]) -> None:
+    """Add new labels to an existing Postgres ENUM (SQLAlchemy native enums)."""
+    for type_name in type_names:
+        exists = await conn.execute(
+            text("SELECT 1 FROM pg_type WHERE typname = :n"),
+            {"n": type_name},
+        )
+        if not exists.first():
+            continue
+        current = await conn.execute(
+            text(
+                "SELECT enumlabel FROM pg_enum "
+                "JOIN pg_type ON pg_enum.enumtypid = pg_type.oid "
+                "WHERE typname = :n"
+            ),
+            {"n": type_name},
+        )
+        have = {row[0] for row in current.fetchall()}
+        for val in values:
+            if val in have:
+                continue
+            await conn.execute(text(f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{val}'"))
 
 
 async def _column_exists(conn, table: str, column: str, is_sqlite: bool) -> bool:

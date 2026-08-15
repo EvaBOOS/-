@@ -50,6 +50,7 @@
                     <li class="nav-item active" data-page="overview"><span>Обзор</span></li>
                     <li class="nav-item" data-page="clients"><span>Клиенты</span></li>
                     <li class="nav-item" data-page="applications"><span>Заявки</span></li>
+                    <li class="nav-item" data-page="moderation"><span>Модерация</span></li>
                     <li class="nav-item" data-page="create-client"><span>Новый клиент</span></li>
                 </ul>
                 <div class="sidebar-footer">
@@ -140,6 +141,61 @@
                             <tbody id="applications-table-body">
                                 <!-- Dynamic content -->
                             </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Moderation queue -->
+                <div id="page-moderation" class="page">
+                    <div class="stats-grid" style="margin-bottom: 18px;">
+                        <div class="stat-card">
+                            <div class="stat-info">
+                                <span class="stat-value" id="mod-hold-open">0</span>
+                                <span class="stat-label">В очереди hold</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-info">
+                                <span class="stat-value" id="mod-hold-rate">0%</span>
+                                <span class="stat-label">Доля hold</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-info">
+                                <span class="stat-value" id="mod-overturn">0%</span>
+                                <span class="stat-label">Отмена решений</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Клиент</th>
+                                    <th>Режим</th>
+                                    <th>Категории</th>
+                                    <th>Причина</th>
+                                    <th>Фрагмент</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="moderation-table-body"></tbody>
+                        </table>
+                    </div>
+                    <h3 style="margin: 28px 0 12px;">Жалобы правообладателей</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>URL</th>
+                                    <th>Сообщение</th>
+                                    <th>Статус</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="complaints-table-body"></tbody>
                         </table>
                     </div>
                 </div>

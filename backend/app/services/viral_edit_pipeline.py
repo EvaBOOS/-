@@ -32,6 +32,7 @@ from app.services.video.content_presets import (
     resolve_format,
 )
 from app.services.source_resolve import ensure_local_source
+from app.services.moderation.runtime import ModerationHalt, run_g2, run_g3
 from app.services.branding_watermark import resolve_export_watermark
 
 # Conservative, single-word-only filler list — deliberately excludes anything
@@ -147,6 +148,11 @@ class ViralEditPipeline:
             label_prefix="[viral_edit]",
         )
         if not source:
+            return None
+
+        try:
+            await run_g2(self.db, generation, client, source)
+        except ModerationHalt:
             return None
 
         generation.started_at = datetime.utcnow()
@@ -441,6 +447,9 @@ class ViralEditPipeline:
                     "skipped": True,
                     "reason": "no_speech",
                 }
+
+            if text:
+                await run_g3(self.db, generation, client, text)
 
             # 3) Rich edit plan
             await self._update(generation, GenerationStatus.VIRAL_EDIT, progress=55)
@@ -1042,6 +1051,8 @@ class ViralEditPipeline:
             await self.db.commit()
             return final_path
 
+        except ModerationHalt:
+            return None
         except Exception as e:
             await self._fail(generation, str(e)[:500])
             return None

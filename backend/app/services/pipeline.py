@@ -16,6 +16,8 @@ from app.services.ai.heygen_service import HeyGenService
 from app.services.video.ffmpeg_service import FFmpegService
 from app.services.assets.library_service import AssetLibraryService
 from app.services.branding_watermark import resolve_export_watermark
+from app.services.moderation.runtime import ModerationHalt, run_g4
+from app.services.moderation.runtime import ModerationHalt, run_g4
 
 
 class VideoGenerationPipeline:
@@ -113,6 +115,14 @@ class VideoGenerationPipeline:
             generation.generated_script = generated_script
             generation.progress_percent = 20
             await self.db.commit()
+
+            await run_g4(
+                self.db,
+                generation,
+                client,
+                generated_script,
+                avatar_source="library",
+            )
             
             await self._update_status(generation, GenerationStatus.VOICE_SYNTHESIS, progress=25)
             
@@ -299,6 +309,8 @@ class VideoGenerationPipeline:
             
             return final_video_path
             
+        except ModerationHalt:
+            return None
         except Exception as e:
             error_msg = str(e)
             await self._update_status(
